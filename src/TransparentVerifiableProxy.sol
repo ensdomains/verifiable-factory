@@ -27,12 +27,6 @@ contract TransparentVerifiableProxy is Proxy, Initializable {
     // ### EVENTS
     error ProxyDeniedOwnerAccess();
 
-    // modifier that allows only the creator address to call certain functions
-    // modifier onlyCreator() {
-    //     require(msg.sender == creator, "Caller is not the creator address");
-    //     _;
-    // }
-
     constructor(address _creator) {
         creator = _creator;
     }
@@ -81,7 +75,7 @@ contract TransparentVerifiableProxy is Proxy, Initializable {
     }
 
     /**
-     * @dev If caller is the owner, process the call internally, otherwise transparently fallback to the proxy behavior.
+     * @dev If caller is the cretor, process the call internally, otherwise transparently fallback to the proxy behavior.
      */
     function _fallback() internal virtual override {
         if (msg.sender == creator) {
