@@ -19,6 +19,7 @@ contract VerifiableFactoryTest is Test {
     address public owner;
     address public user;
     address public maliciousUser;
+    bytes emptyData;
 
     // ### Events
     event ProxyDeployed(address indexed sender, address indexed proxyAddress, uint256 salt, address implementation);
@@ -51,7 +52,7 @@ contract VerifiableFactoryTest is Test {
         emit ProxyDeployed(owner, computeExpectedAddress(salt), salt, address(implementation));
 
         vm.startPrank(owner);
-        address proxyAddress = factory.deployProxy(address(implementation), salt);
+        address proxyAddress = factory.deployProxy(address(implementation), salt, emptyData);
 
         vm.stopPrank();
 
@@ -71,11 +72,11 @@ contract VerifiableFactoryTest is Test {
         vm.startPrank(owner);
 
         // deploy first proxy
-        factory.deployProxy(address(implementation), salt);
+        factory.deployProxy(address(implementation), salt, emptyData);
 
         // try to deploy another proxy with same salt - should fail
         vm.expectRevert();
-        factory.deployProxy(address(implementation), salt);
+        factory.deployProxy(address(implementation), salt, emptyData);
 
         vm.stopPrank();
     }
@@ -85,7 +86,7 @@ contract VerifiableFactoryTest is Test {
 
         // deploy proxy as owner
         vm.prank(owner);
-        address proxyAddress = factory.deployProxy(address(implementation), salt);
+        address proxyAddress = factory.deployProxy(address(implementation), salt, emptyData);
 
         // try to upgrade as non-owner (should fail)
         vm.prank(maliciousUser);
@@ -114,7 +115,7 @@ contract VerifiableFactoryTest is Test {
 
         // deploy proxy
         vm.prank(owner);
-        address proxyAddress = factory.deployProxy(address(implementation), salt);
+        address proxyAddress = factory.deployProxy(address(implementation), salt, emptyData);
 
         vm.prank(owner);
         // verify the contract
@@ -132,7 +133,7 @@ contract VerifiableFactoryTest is Test {
         uint256 salt = 1;
 
         vm.prank(owner);
-        address proxyAddress = factory.deployProxy(address(implementation), salt);
+        address proxyAddress = factory.deployProxy(address(implementation), salt, emptyData);
 
         // test proxy state
         TransparentVerifiableProxy proxy = TransparentVerifiableProxy(payable(proxyAddress));
@@ -148,7 +149,7 @@ contract VerifiableFactoryTest is Test {
 
         // deploy proxy
         vm.prank(owner);
-        address proxyAddress = factory.deployProxy(address(implementation), salt);
+        address proxyAddress = factory.deployProxy(address(implementation), salt, emptyData);
 
         // initialize v1 implementation
         MockRegistry proxyV1 = MockRegistry(proxyAddress);

@@ -28,14 +28,14 @@ contract VerifiableFactory {
      * @param salt A value provided by the caller to ensure uniqueness of the proxy address.
      * @return proxy The address of the deployed `TransparentVerifiableProxy`.
      */
-    function deployProxy(address implementation, uint256 salt) external returns (address) {
+    function deployProxy(address implementation, uint256 salt, bytes memory data) external returns (address) {
         bytes32 outerSalt = keccak256(abi.encode(msg.sender, salt));
 
         TransparentVerifiableProxy proxy = new TransparentVerifiableProxy{salt: outerSalt}(address(this));
 
         require(isContract(address(proxy)), "Proxy deployment failed");
 
-        proxy.initialize(salt, msg.sender, implementation, "");
+        proxy.initialize(salt, msg.sender, implementation, data);
 
         emit ProxyDeployed(msg.sender, address(proxy), salt, implementation);
         return address(proxy);
