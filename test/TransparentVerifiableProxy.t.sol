@@ -27,6 +27,7 @@ contract TransparentVerifiableProxyTest is Test {
 
     function testInitialize() public {
         // initialize the proxy
+        vm.prank(creator);
         proxy.initialize(salt, owner, implementation, emptyData);
 
         // check salt and owner values
@@ -36,6 +37,7 @@ contract TransparentVerifiableProxyTest is Test {
 
     function testSaltStorage() public {
         // initialize the proxy
+        vm.prank(creator);
         proxy.initialize(salt, owner, implementation, emptyData);
 
         // compute the base slot
@@ -54,6 +56,7 @@ contract TransparentVerifiableProxyTest is Test {
 
     function testOwnerStorage() public {
         // initialize the proxy
+        vm.prank(creator);
         proxy.initialize(salt, owner, implementation, emptyData);
 
         // compute the base slot

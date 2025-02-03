@@ -46,6 +46,7 @@ contract TransparentVerifiableProxy is Proxy, Initializable {
         payable
         initializer
     {
+        require(msg.sender == creator, "Unauthorized initialization");
         require(implementation != address(0), "New implementation cannot be the zero address");
 
         bytes32 baseSlot = _VERIFICATION_SLOT.erc7201Slot();
