@@ -31,8 +31,8 @@ contract TransparentVerifiableProxyTest is Test {
         proxy.initialize(salt, owner, implementation, emptyData);
 
         // check salt and owner values
-        assertEq(proxy.salt(), salt, "Salt mismatch");
-        assertEq(proxy.owner(), owner, "Owner mismatch");
+        assertEq(proxy.getVerifiableProxySalt(), salt, "Salt mismatch");
+        assertEq(proxy.getVerifiableProxyOwner(), owner, "Owner mismatch");
     }
 
     function testSaltStorage() public {
@@ -51,7 +51,7 @@ contract TransparentVerifiableProxyTest is Test {
         vm.store(address(proxy), saltSlot, bytes32(newSalt));
 
         // verify the updated salt
-        assertEq(proxy.salt(), newSalt, "Salt update failed");
+        assertEq(proxy.getVerifiableProxySalt(), newSalt, "Salt update failed");
     }
 
     function testOwnerStorage() public {
@@ -70,6 +70,6 @@ contract TransparentVerifiableProxyTest is Test {
         vm.store(address(proxy), ownerSlot, bytes32(uint256(uint160(newOwner))));
 
         // verify the updated owner
-        assertEq(proxy.owner(), newOwner, "Owner update failed");
+        assertEq(proxy.getVerifiableProxyOwner(), newOwner, "Owner update failed");
     }
 }

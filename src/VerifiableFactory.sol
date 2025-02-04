@@ -9,8 +9,6 @@ import {ITransparentVerifiableProxy} from "./ITransparentVerifiableProxy.sol";
 contract VerifiableFactory {
     event ProxyDeployed(address indexed sender, address indexed proxyAddress, uint256 salt, address implementation);
 
-    constructor() {}
-
     /**
      * @dev Deploys a new `TransparentVerifiableProxy` contract at a deterministic address.
      *
@@ -43,7 +41,7 @@ contract VerifiableFactory {
 
     // Function to upgrade the proxy's implementation (only owner of proxy can call this)
     function upgradeImplementation(address proxyAddress, address newImplementation, bytes memory data) external {
-        address owner = ITransparentVerifiableProxy(proxyAddress).owner();
+        address owner = ITransparentVerifiableProxy(proxyAddress).getVerifiableProxyOwner();
         require(owner == msg.sender, "Only the owner can upgrade");
 
         // Upgrade the proxy to point to the new implementation
@@ -64,8 +62,8 @@ contract VerifiableFactory {
         if (!isContract(proxy)) {
             return false;
         }
-        try ITransparentVerifiableProxy(proxy).salt() returns (uint256 salt) {
-            try ITransparentVerifiableProxy(proxy).owner() returns (address owner) {
+        try ITransparentVerifiableProxy(proxy).getVerifiableProxySalt() returns (uint256 salt) {
+            try ITransparentVerifiableProxy(proxy).getVerifiableProxyOwner() returns (address owner) {
                 return _verifyContract(proxy, owner, salt);
             } catch {}
         } catch {}

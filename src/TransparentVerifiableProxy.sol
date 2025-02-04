@@ -22,7 +22,7 @@ contract TransparentVerifiableProxy is Proxy {
     string internal constant _OWNER = "owner";
 
     // immutable variable (in bytecode)
-    address public immutable creator;
+    address public immutable verifiableProxyCreator;
 
     modifier initializer() {
         bytes32 baseSlot = _VERIFICATION_SLOT.erc7201Slot();
@@ -35,7 +35,7 @@ contract TransparentVerifiableProxy is Proxy {
     error ProxyDeniedOwnerAccess();
 
     constructor(address _creator) {
-        creator = _creator;
+        verifiableProxyCreator = _creator;
     }
 
     /**
@@ -54,7 +54,7 @@ contract TransparentVerifiableProxy is Proxy {
         address implementation,
         bytes memory data
     ) public payable initializer {
-        require(msg.sender == creator, "Unauthorized initialization");
+        require(msg.sender == verifiableProxyCreator, "Unauthorized initialization");
         require(
             implementation != address(0),
             "New implementation cannot be the zero address"
@@ -67,11 +67,11 @@ contract TransparentVerifiableProxy is Proxy {
         ERC1967Utils.upgradeToAndCall(implementation, data);
     }
 
-    function salt() public view returns (uint256) {
+    function getVerifiableProxySalt() public view returns (uint256) {
         return _getSalt(_VERIFICATION_SLOT.erc7201Slot());
     }
 
-    function owner() public view returns (address) {
+    function getVerifiableProxyOwner() public view returns (address) {
         return _getOwner(_VERIFICATION_SLOT.erc7201Slot());
     }
 
@@ -96,7 +96,7 @@ contract TransparentVerifiableProxy is Proxy {
      * @dev If caller is the cretor, process the call internally, otherwise transparently fallback to the proxy behavior.
      */
     function _fallback() internal virtual override {
-        if (msg.sender == creator) {
+        if (msg.sender == verifiableProxyCreator) {
             if (
                 msg.sig != ITransparentVerifiableProxy.upgradeToAndCall.selector
             ) {

@@ -63,9 +63,9 @@ contract VerifiableFactoryTest is Test {
 
         // verify proxy state
         TransparentVerifiableProxy proxy = TransparentVerifiableProxy(payable(proxyAddress));
-        assertEq(proxy.salt(), salt, "Proxy salt mismatch");
-        assertEq(proxy.owner(), owner, "Proxy owner mismatch");
-        assertEq(proxy.creator(), address(factory), "Proxy creator mismatch");
+        assertEq(proxy.getVerifiableProxySalt(), salt, "Proxy salt mismatch");
+        assertEq(proxy.getVerifiableProxyOwner(), owner, "Proxy owner mismatch");
+        assertEq(proxy.verifiableProxyCreator(), address(factory), "Proxy creator mismatch");
     }
 
     function test_DeployProxyWithSameSalt() public {
@@ -139,9 +139,9 @@ contract VerifiableFactoryTest is Test {
         // test proxy state
         TransparentVerifiableProxy proxy = TransparentVerifiableProxy(payable(proxyAddress));
 
-        assertEq(proxy.salt(), salt, "Wrong salt");
-        assertEq(proxy.owner(), owner, "Wrong owner");
-        assertEq(proxy.creator(), address(factory), "Wrong creator");
+        assertEq(proxy.getVerifiableProxySalt(), salt, "Wrong salt");
+        assertEq(proxy.getVerifiableProxyOwner(), owner, "Wrong owner");
+        assertEq(proxy.verifiableProxyCreator(), address(factory), "Wrong creator");
     }
 
     function test_StoragePersistenceAfterUpgrade() public {
@@ -202,7 +202,9 @@ contract VerifiableFactoryTest is Test {
         MockRegistry proxyRegistryV1 = MockRegistry(proxyAddress);
 
         assertEq(proxyRegistryV1.owner(), owner, "Wrong proxyRegistryV1 owner");
-        assertEq(proxy.creator(), address(factory), "Wrong proxy creator");
+        assertEq(proxy.getVerifiableProxySalt(), salt, "Wrong proxy salt");
+        assertEq(proxy.getVerifiableProxyOwner(), owner, "Wrong proxy owner");
+        assertEq(proxy.verifiableProxyCreator(), address(factory), "Wrong proxy creator");
     }
 
     // ### Helpers
