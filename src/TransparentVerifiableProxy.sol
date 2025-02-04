@@ -8,6 +8,8 @@ pragma solidity ^0.8.20;
 import {Proxy} from "@openzeppelin/contracts/proxy/Proxy.sol";
 import {ERC1967Utils} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Utils.sol";
 import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
+import {StorageSlot} from "@openzeppelin/contracts/utils/StorageSlot.sol";
+import {SlotDerivation} from "@openzeppelin/contracts/utils/SlotDerivation.sol";
 
 interface ITransparentVerifiableProxy {
     /// @dev See {UUPSUpgradeable-upgradeToAndCall}
@@ -15,12 +17,16 @@ interface ITransparentVerifiableProxy {
 }
 
 contract TransparentVerifiableProxy is Proxy, Initializable {
+    using StorageSlot for bytes32;
+    using SlotDerivation for bytes32;
+    using SlotDerivation for string;
+
+    string internal constant _VERIFICATION_SLOT = "proxy.verifiable";
+    string internal constant _SALT = "salt";
+    string internal constant _OWNER = "owner";
+
     // immutable variable (in bytecode)
     address public immutable creator;
-
-    // storage variables (in storage slots)
-    uint256 public salt; // Salt, being used creating the proxy (slot 0)
-    address public owner; // The owner of the proxy contract (slot 1)
 
     // ### EVENTS
     error ProxyDeniedOwnerAccess();
@@ -52,10 +58,19 @@ contract TransparentVerifiableProxy is Proxy, Initializable {
     {
         require(implementation != address(0), "New implementation cannot be the zero address");
 
-        salt = _salt;
-        owner = _owner;
+        bytes32 baseSlot = _VERIFICATION_SLOT.erc7201Slot();
+        _setSalt(baseSlot, _salt);
+        _setOwner(baseSlot, _owner);
 
         ERC1967Utils.upgradeToAndCall(implementation, data);
+    }
+
+    function salt() public view returns (uint256) {
+        return _getSalt(_VERIFICATION_SLOT.erc7201Slot());
+    }
+
+    function owner() public view returns (address) {
+        return _getOwner(_VERIFICATION_SLOT.erc7201Slot());
     }
 
     /**
@@ -94,6 +109,22 @@ contract TransparentVerifiableProxy is Proxy, Initializable {
     function _dispatchUpgradeToAndCall() private {
         (address newImplementation, bytes memory data) = abi.decode(msg.data[4:], (address, bytes));
         ERC1967Utils.upgradeToAndCall(newImplementation, data);
+    }
+
+    function _getSalt(bytes32 baseSlot) internal view returns (uint256) {
+        return baseSlot.deriveMapping(_SALT).getUint256Slot().value;
+    }
+
+    function _setSalt(bytes32 baseSlot, uint256 _salt) internal {
+        baseSlot.deriveMapping(_SALT).getUint256Slot().value = _salt;
+    }
+
+    function _getOwner(bytes32 baseSlot) internal view returns (address) {
+        return baseSlot.deriveMapping(_OWNER).getAddressSlot().value;
+    }
+
+    function _setOwner(bytes32 baseSlot, address _owner) internal {
+        baseSlot.deriveMapping(_OWNER).getAddressSlot().value = _owner;
     }
 
     receive() external payable {}

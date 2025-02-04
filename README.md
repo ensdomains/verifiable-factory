@@ -12,9 +12,9 @@ A system for deploying and verifying proxy contracts with predictable storage la
 
 ### 2. TransparentVerifiableProxy
 - Transparent proxy pattern with verified storage layout
-- Fixed storage slots:
-  - Slot 0: `salt` (uint256)
-  - Slot 1: `owner` (address)
+- Fixed storage slots via [SlotDerivation](https://docs.openzeppelin.com/contracts/5.x/api/utils#SlotDerivation) under `proxy.verifiable` namespace
+  - `salt` (uint256)
+  - `owner` (address)
 - Immutable `creator` field (set in bytecode)
 - Implements secure upgrade mechanism
 - Initializable to prevent implementation tampering
