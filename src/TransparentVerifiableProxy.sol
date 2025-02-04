@@ -7,22 +7,29 @@ pragma solidity ^0.8.20;
 
 import {Proxy} from "@openzeppelin/contracts/proxy/Proxy.sol";
 import {ERC1967Utils} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Utils.sol";
-import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 import {StorageSlot} from "@openzeppelin/contracts/utils/StorageSlot.sol";
 import {SlotDerivation} from "@openzeppelin/contracts/utils/SlotDerivation.sol";
 import {ITransparentVerifiableProxy} from "./ITransparentVerifiableProxy.sol";
 
-contract TransparentVerifiableProxy is Proxy, Initializable {
+contract TransparentVerifiableProxy is Proxy {
     using StorageSlot for bytes32;
     using SlotDerivation for bytes32;
     using SlotDerivation for string;
 
+    string internal constant _INITIALIZED_SLOT = "proxy.initialized";
     string internal constant _VERIFICATION_SLOT = "proxy.verifiable";
     string internal constant _SALT = "salt";
     string internal constant _OWNER = "owner";
 
     // immutable variable (in bytecode)
     address public immutable creator;
+
+    modifier initializer() {
+        bytes32 baseSlot = _VERIFICATION_SLOT.erc7201Slot();
+        require(_getInitialized(baseSlot) == false, "Already initialized");
+        _setInitialized(baseSlot, true);
+        _;
+    }
 
     // ### EVENTS
     error ProxyDeniedOwnerAccess();
@@ -41,13 +48,17 @@ contract TransparentVerifiableProxy is Proxy, Initializable {
      *
      * - If `data` is empty, `msg.value` must be zero.
      */
-    function initialize(uint256 _salt, address _owner, address implementation, bytes memory data)
-        public
-        payable
-        initializer
-    {
+    function initialize(
+        uint256 _salt,
+        address _owner,
+        address implementation,
+        bytes memory data
+    ) public payable initializer {
         require(msg.sender == creator, "Unauthorized initialization");
-        require(implementation != address(0), "New implementation cannot be the zero address");
+        require(
+            implementation != address(0),
+            "New implementation cannot be the zero address"
+        );
 
         bytes32 baseSlot = _VERIFICATION_SLOT.erc7201Slot();
         _setSalt(baseSlot, _salt);
@@ -71,7 +82,13 @@ contract TransparentVerifiableProxy is Proxy, Initializable {
      * the https://eth.wiki/json-rpc/API#eth_getstorageat[`eth_getStorageAt`] RPC call.
      * `0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc`
      */
-    function _implementation() internal view virtual override returns (address) {
+    function _implementation()
+        internal
+        view
+        virtual
+        override
+        returns (address)
+    {
         return ERC1967Utils.getImplementation();
     }
 
@@ -80,7 +97,9 @@ contract TransparentVerifiableProxy is Proxy, Initializable {
      */
     function _fallback() internal virtual override {
         if (msg.sender == creator) {
-            if (msg.sig != ITransparentVerifiableProxy.upgradeToAndCall.selector) {
+            if (
+                msg.sig != ITransparentVerifiableProxy.upgradeToAndCall.selector
+            ) {
                 revert ProxyDeniedOwnerAccess();
             } else {
                 _dispatchUpgradeToAndCall();
@@ -98,8 +117,22 @@ contract TransparentVerifiableProxy is Proxy, Initializable {
      * - If `data` is empty, `msg.value` must be zero.
      */
     function _dispatchUpgradeToAndCall() private {
-        (address newImplementation, bytes memory data) = abi.decode(msg.data[4:], (address, bytes));
+        (address newImplementation, bytes memory data) = abi.decode(
+            msg.data[4:],
+            (address, bytes)
+        );
         ERC1967Utils.upgradeToAndCall(newImplementation, data);
+    }
+
+    function _getInitialized(bytes32 baseSlot) internal view returns (bool) {
+        return baseSlot.deriveMapping(_INITIALIZED_SLOT).getBooleanSlot().value;
+    }
+
+    function _setInitialized(bytes32 baseSlot, bool _initialized) internal {
+        baseSlot
+            .deriveMapping(_INITIALIZED_SLOT)
+            .getBooleanSlot()
+            .value = _initialized;
     }
 
     function _getSalt(bytes32 baseSlot) internal view returns (uint256) {

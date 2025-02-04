@@ -3,6 +3,7 @@ pragma solidity ^0.8.20;
 
 import {Test, console2} from "forge-std/Test.sol";
 import {Create2} from "@openzeppelin/contracts/utils/Create2.sol";
+import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 
 import {VerifiableFactory} from "../src/VerifiableFactory.sol";
 import {TransparentVerifiableProxy} from "../src/TransparentVerifiableProxy.sol";
@@ -147,17 +148,16 @@ contract VerifiableFactoryTest is Test {
         uint256 salt = 1;
         address testAccount = makeAddr("testAccount");
 
+        bytes memory initData = abi.encodeWithSelector(MockRegistry.initialize.selector, owner);
+
         // deploy proxy
         vm.prank(owner);
-        address proxyAddress = factory.deployProxy(address(implementation), salt, emptyData);
+        address proxyAddress = factory.deployProxy(address(implementation), salt, initData);
 
         // initialize v1 implementation
         MockRegistry proxyV1 = MockRegistry(proxyAddress);
 
-        // initialize registry
-        vm.prank(owner);
-        proxyV1.initialize(owner);
-        assertEq(proxyV1.admin(), owner, "Admin should be set");
+        assertEq(proxyV1.owner(), owner, "Owner should be set");
 
         // register an address
         vm.prank(owner);
@@ -174,7 +174,7 @@ contract VerifiableFactoryTest is Test {
 
         // check storage persistence
         assertTrue(proxyV2.registeredAddresses(testAccount), "Address registration should persist after upgrade");
-        assertEq(proxyV2.admin(), owner, "Admin should persist after upgrade");
+        assertEq(proxyV2.owner(), owner, "Owner should persist after upgrade");
         assertEq(proxyV2.getRegistryVersion(), 2, "Should be V2 implementation");
 
         // verify v2 functionality still works as it should be
@@ -182,6 +182,27 @@ contract VerifiableFactoryTest is Test {
         vm.prank(owner);
         proxyV2.register(newTestAccount);
         assertTrue(proxyV2.registeredAddresses(newTestAccount), "Should be able to register new address in V2");
+
+        address newTestAccount2 = makeAddr("newTestAccount2");
+        vm.prank(maliciousUser);
+        vm.expectRevert(abi.encodeWithSelector(OwnableUpgradeable.OwnableUnauthorizedAccount.selector, maliciousUser));
+        proxyV2.register(newTestAccount2);
+    }
+
+    function test_ProxyOwner() public {
+        uint256 salt = 1;
+
+        bytes memory initData = abi.encodeWithSelector(MockRegistry.initialize.selector, owner);
+
+        vm.prank(owner);
+        address proxyAddress = factory.deployProxy(address(implementation), salt, initData);
+
+        // test proxy state
+        TransparentVerifiableProxy proxy = TransparentVerifiableProxy(payable(proxyAddress));
+        MockRegistry proxyRegistryV1 = MockRegistry(proxyAddress);
+
+        assertEq(proxyRegistryV1.owner(), owner, "Wrong proxyRegistryV1 owner");
+        assertEq(proxy.creator(), address(factory), "Wrong proxy creator");
     }
 
     // ### Helpers
