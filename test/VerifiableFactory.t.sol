@@ -142,6 +142,47 @@ contract VerifiableFactoryTest is Test {
         assertEq(proxy.creator(), address(factory), "Wrong creator");
     }
 
+    function test_StoragePersistenceAfterUpgrade() public {
+        uint256 salt = 1;
+        address testAccount = makeAddr("testAccount");
+
+        // deploy proxy
+        vm.prank(owner);
+        address proxyAddress = factory.deployProxy(address(implementation), salt);
+
+        // initialize v1 implementation
+        MockRegistry proxyV1 = MockRegistry(proxyAddress);
+
+        // initialize registry
+        vm.prank(owner);
+        proxyV1.initialize(owner);
+        assertEq(proxyV1.admin(), owner, "Admin should be set");
+
+        // register an address
+        vm.prank(owner);
+        proxyV1.register(testAccount);
+        assertTrue(proxyV1.registeredAddresses(testAccount), "Address should be registered in V1");
+        assertEq(proxyV1.getRegistryVersion(), 1, "Should be V1 implementation");
+
+        // upgrade to v2
+        vm.prank(owner);
+        factory.upgradeImplementation(proxyAddress, address(implementationV2), "");
+
+        // verify state persists after upgrade
+        MockRegistryV2 proxyV2 = MockRegistryV2(proxyAddress);
+
+        // check storage persistence
+        assertTrue(proxyV2.registeredAddresses(testAccount), "Address registration should persist after upgrade");
+        assertEq(proxyV2.admin(), owner, "Admin should persist after upgrade");
+        assertEq(proxyV2.getRegistryVersion(), 2, "Should be V2 implementation");
+
+        // verify v2 functionality still works as it should be
+        address newTestAccount = makeAddr("newTestAccount");
+        vm.prank(owner);
+        proxyV2.register(newTestAccount);
+        assertTrue(proxyV2.registeredAddresses(newTestAccount), "Should be able to register new address in V2");
+    }
+
     // ### Helpers
     function isContract(address account) internal view returns (bool) {
         uint256 size;

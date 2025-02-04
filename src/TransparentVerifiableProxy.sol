@@ -10,11 +10,7 @@ import {ERC1967Utils} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Utils.s
 import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 import {StorageSlot} from "@openzeppelin/contracts/utils/StorageSlot.sol";
 import {SlotDerivation} from "@openzeppelin/contracts/utils/SlotDerivation.sol";
-
-interface ITransparentVerifiableProxy {
-    /// @dev See {UUPSUpgradeable-upgradeToAndCall}
-    function upgradeToAndCall(address newImplementation, bytes calldata data) external payable;
-}
+import {ITransparentVerifiableProxy} from "./ITransparentVerifiableProxy.sol";
 
 contract TransparentVerifiableProxy is Proxy, Initializable {
     using StorageSlot for bytes32;
@@ -30,12 +26,6 @@ contract TransparentVerifiableProxy is Proxy, Initializable {
 
     // ### EVENTS
     error ProxyDeniedOwnerAccess();
-
-    // // Modifier that allows only the owner to call certain functions
-    // modifier onlyOwner() {
-    //     require(msg.sender == owner, "Caller is not the owner");
-    //     _;
-    // }
 
     constructor(address _creator) {
         creator = _creator;
@@ -56,6 +46,7 @@ contract TransparentVerifiableProxy is Proxy, Initializable {
         payable
         initializer
     {
+        require(msg.sender == creator, "Unauthorized initialization");
         require(implementation != address(0), "New implementation cannot be the zero address");
 
         bytes32 baseSlot = _VERIFICATION_SLOT.erc7201Slot();
@@ -85,7 +76,7 @@ contract TransparentVerifiableProxy is Proxy, Initializable {
     }
 
     /**
-     * @dev If caller is the owner, process the call internally, otherwise transparently fallback to the proxy behavior.
+     * @dev If caller is the cretor, process the call internally, otherwise transparently fallback to the proxy behavior.
      */
     function _fallback() internal virtual override {
         if (msg.sender == creator) {
