@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
+import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 
 /**
  * @title MockRegistry
  * @dev Simulates a registry implementation for testing
  */
-contract MockRegistry is OwnableUpgradeable {
+contract MockRegistry is UUPSUpgradeable, OwnableUpgradeable {
     mapping(address => bool) public registeredAddresses;
     uint256 public constant version = 1;
 
@@ -15,8 +16,11 @@ contract MockRegistry is OwnableUpgradeable {
     event AddressRegistered(address indexed account);
     event AddressUnregistered(address indexed account);
 
+    function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
+
     function initialize(address _owner) public initializer {
         __Ownable_init(_owner); // Initialize Ownable
+        __UUPSUpgradeable_init();
     }
 
     function register(address account) external onlyOwner {

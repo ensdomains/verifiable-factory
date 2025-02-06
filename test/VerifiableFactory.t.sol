@@ -6,7 +6,8 @@ import {Create2} from "@openzeppelin/contracts/utils/Create2.sol";
 import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 
 import {VerifiableFactory} from "../src/VerifiableFactory.sol";
-import {TransparentVerifiableProxy} from "../src/TransparentVerifiableProxy.sol";
+import {UUPSProxy} from "../src/UUPSProxy.sol";
+import {IUUPSProxy} from "../src/IUUPSProxy.sol";
 import {MockRegistry} from "../src/mock/MockRegistry.sol";
 import {MockRegistryV2} from "../src/mock/MockRegistryV2.sol";
 
@@ -62,10 +63,10 @@ contract VerifiableFactoryTest is Test {
         assertTrue(isContract(proxyAddress), "Proxy should be a contract");
 
         // verify proxy state
-        TransparentVerifiableProxy proxy = TransparentVerifiableProxy(payable(proxyAddress));
-        assertEq(proxy.getVerifiableProxySalt(), salt, "Proxy salt mismatch");
-        assertEq(proxy.getVerifiableProxyOwner(), owner, "Proxy owner mismatch");
-        assertEq(proxy.verifiableProxyCreator(), address(factory), "Proxy creator mismatch");
+        UUPSProxy proxy = UUPSProxy(payable(proxyAddress));
+        bytes32 computedSalt = keccak256(abi.encode(owner, salt));
+        assertEq(proxy.getVerifiableProxySalt(), computedSalt, "Proxy salt mismatch");
+        assertEq(proxy.verifiableProxyFactory(), address(factory), "Proxy factory mismatch");
     }
 
     function test_DeployProxyWithSameSalt() public {
@@ -85,23 +86,26 @@ contract VerifiableFactoryTest is Test {
     function test_UpgradeImplementation() public {
         uint256 salt = 1;
 
+        bytes memory initData = abi.encodeWithSelector(MockRegistry.initialize.selector, owner);
         // deploy proxy as owner
         vm.prank(owner);
-        address proxyAddress = factory.deployProxy(address(implementation), salt, emptyData);
+        address proxyAddress = factory.deployProxy(address(implementation), salt, initData);
+
+        MockRegistry proxyV1 = MockRegistry(proxyAddress);
 
         // try to upgrade as non-owner (should fail)
         vm.prank(maliciousUser);
-        vm.expectRevert("Only the owner can upgrade");
-        factory.upgradeImplementation(
-            proxyAddress,
+        vm.expectRevert(abi.encodeWithSelector(OwnableUpgradeable.OwnableUnauthorizedAccount.selector, maliciousUser));
+        proxyV1.upgradeToAndCall(
             address(implementationV2),
             "" // add upgrade data if we need
         );
 
+        console2.log("proxyV1.owner()");
+        console2.logAddress(proxyV1.owner());
         // upgrade as owner (should pass)
         vm.prank(owner);
-        factory.upgradeImplementation(
-            proxyAddress,
+        proxyV1.upgradeToAndCall(
             address(implementationV2),
             "" // add upgrade data if we need
         );
@@ -137,11 +141,11 @@ contract VerifiableFactoryTest is Test {
         address proxyAddress = factory.deployProxy(address(implementation), salt, emptyData);
 
         // test proxy state
-        TransparentVerifiableProxy proxy = TransparentVerifiableProxy(payable(proxyAddress));
+        UUPSProxy proxy = UUPSProxy(payable(proxyAddress));
 
-        assertEq(proxy.getVerifiableProxySalt(), salt, "Wrong salt");
-        assertEq(proxy.getVerifiableProxyOwner(), owner, "Wrong owner");
-        assertEq(proxy.verifiableProxyCreator(), address(factory), "Wrong creator");
+        bytes32 computedSalt = keccak256(abi.encode(owner, salt));
+        assertEq(proxy.getVerifiableProxySalt(), computedSalt, "Wrong salt");
+        assertEq(proxy.verifiableProxyFactory(), address(factory), "Wrong factory");
     }
 
     function test_StoragePersistenceAfterUpgrade() public {
@@ -167,7 +171,10 @@ contract VerifiableFactoryTest is Test {
 
         // upgrade to v2
         vm.prank(owner);
-        factory.upgradeImplementation(proxyAddress, address(implementationV2), "");
+        proxyV1.upgradeToAndCall(
+            address(implementationV2),
+            "" // add upgrade data if we need
+        );
 
         // verify state persists after upgrade
         MockRegistryV2 proxyV2 = MockRegistryV2(proxyAddress);
@@ -198,13 +205,13 @@ contract VerifiableFactoryTest is Test {
         address proxyAddress = factory.deployProxy(address(implementation), salt, initData);
 
         // test proxy state
-        TransparentVerifiableProxy proxy = TransparentVerifiableProxy(payable(proxyAddress));
+        UUPSProxy proxy = UUPSProxy(payable(proxyAddress));
         MockRegistry proxyRegistryV1 = MockRegistry(proxyAddress);
 
+        bytes32 computedSalt = keccak256(abi.encode(owner, salt));
+        assertEq(proxy.getVerifiableProxySalt(), computedSalt, "Wrong proxy salt");
         assertEq(proxyRegistryV1.owner(), owner, "Wrong proxyRegistryV1 owner");
-        assertEq(proxy.getVerifiableProxySalt(), salt, "Wrong proxy salt");
-        assertEq(proxy.getVerifiableProxyOwner(), owner, "Wrong proxy owner");
-        assertEq(proxy.verifiableProxyCreator(), address(factory), "Wrong proxy creator");
+        assertEq(proxy.verifiableProxyFactory(), address(factory), "Wrong proxy factory");
     }
 
     // ### Helpers
@@ -220,7 +227,7 @@ contract VerifiableFactoryTest is Test {
         bytes32 outerSalt = keccak256(abi.encode(owner, salt));
 
         bytes memory bytecode =
-            abi.encodePacked(type(TransparentVerifiableProxy).creationCode, abi.encode(address(factory)));
+            abi.encodePacked(type(UUPSProxy).creationCode, abi.encode(address(factory)));
 
         return Create2.computeAddress(outerSalt, keccak256(bytecode), address(factory));
     }
