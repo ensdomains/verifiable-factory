@@ -10,7 +10,7 @@ import {ERC1967Utils, StorageSlot} from "@openzeppelin/contracts/proxy/ERC1967/E
 import {SlotDerivation} from "@openzeppelin/contracts/utils/SlotDerivation.sol";
 import {IUUPSProxy} from "./IUUPSProxy.sol";
 
-contract UUPSProxy is Proxy {
+contract UUPSProxy is Proxy, IUUPSProxy {
     using StorageSlot for bytes32;
     using SlotDerivation for bytes32;
     using SlotDerivation for string;
