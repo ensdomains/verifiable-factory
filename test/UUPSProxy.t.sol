@@ -6,7 +6,7 @@ import "../src/UUPSProxy.sol";
 import {SlotDerivation} from "@openzeppelin/contracts/utils/SlotDerivation.sol";
 import {MockRegistry} from "../src/mock/MockRegistry.sol";
 
-contract TransparentVerifiableProxyTest is Test {
+contract UUPSProxyTest is Test {
     using SlotDerivation for bytes32;
 
     UUPSProxy proxy;

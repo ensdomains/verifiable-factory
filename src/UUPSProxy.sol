@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 
-// This contract was adapted from OpenZeppelin's ERC1967Proxy and TransparentUpgradeableProxy implementation.
+// This contract was adapted from OpenZeppelin's ERC1967Proxy and UUPS proxy pattern.
 // @ref: @openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol
-// @ref: @openzeppelin/contracts/proxy/transparent/TransparentUpgradeableProxy.sol
+// @ref: @openzeppelin/contracts/proxy/utils/UUPSUpgradeable.sol
 pragma solidity ^0.8.20;
 
 import {Proxy} from "@openzeppelin/contracts/proxy/Proxy.sol";
