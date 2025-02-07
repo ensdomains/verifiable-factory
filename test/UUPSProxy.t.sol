@@ -17,7 +17,7 @@ contract UUPSProxyTest is Test {
     bytes32 salt = bytes32(uint256(12345));
     bytes emptyData;
 
-    string internal constant _VERIFICATION_SLOT = "proxy.verifiable";
+    string internal constant _VERIFICATION_SLOT = "eth.ens.proxy.verifiable";
     string internal constant _SALT = "salt";
     string internal constant _OWNER = "owner";
 
