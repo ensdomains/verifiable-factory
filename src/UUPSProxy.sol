@@ -15,7 +15,7 @@ contract UUPSProxy is Proxy, IUUPSProxy {
     using SlotDerivation for bytes32;
     using SlotDerivation for string;
 
-    string internal constant _VERIFICATION_SLOT = "proxy.verifiable";
+    string internal constant _VERIFICATION_SLOT = "eth.ens.proxy.verifiable";
     string internal constant _SALT = "salt";
 
     // immutable variable (in bytecode)
