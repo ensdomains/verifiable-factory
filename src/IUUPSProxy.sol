@@ -5,7 +5,4 @@ interface IUUPSProxy {
     function getVerifiableProxySalt() external view returns (bytes32);
 
     function verifiableProxyFactory() external view returns (address);
-
-    /// @dev See {UUPSUpgradeable-upgradeToAndCall}
-    function upgradeToAndCall(address newImplementation, bytes calldata data) external payable;
 }
