@@ -7,7 +7,8 @@ import {SlotDerivation} from "@openzeppelin/contracts/utils/SlotDerivation.sol";
 import {MockRegistry} from "../src/mock/MockRegistry.sol";
 
 contract UUPSProxyTest is Test {
-    using SlotDerivation for bytes32;
+    using StorageSlot for bytes32;
+    using SlotDerivation for string;
 
     UUPSProxy proxy;
 
@@ -17,9 +18,7 @@ contract UUPSProxyTest is Test {
     bytes32 salt = bytes32(uint256(12345));
     bytes emptyData;
 
-    string internal constant _VERIFICATION_SLOT = "eth.ens.proxy.verifiable";
-    string internal constant _SALT = "salt";
-    string internal constant _OWNER = "owner";
+    string internal constant _SALT_SLOT = "eth.ens.proxy.verifiable.salt";
 
     function setUp() public {
         proxy = new UUPSProxy(factory);
@@ -39,14 +38,11 @@ contract UUPSProxyTest is Test {
         vm.prank(factory);
         proxy.initialize(salt, implementation, emptyData);
 
-        // compute the base slot
-        bytes32 baseSlot = SlotDerivation.erc7201Slot(_VERIFICATION_SLOT);
-
         // use SlotDerivation to compute the salt slot
-        bytes32 saltSlot = baseSlot.deriveMapping(_SALT);
+        bytes32 saltSlot = _SALT_SLOT.erc7201Slot();
 
         // directly manipulate the storage for the salt
-        bytes32 newSalt = bytes32(uint256(54321));
+        uint256 newSalt = 54321;
         bytes32 computedSalt = keccak256(abi.encode(owner, newSalt));
         vm.store(address(proxy), saltSlot, computedSalt);
 

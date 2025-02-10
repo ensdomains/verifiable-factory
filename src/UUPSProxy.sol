@@ -12,11 +12,9 @@ import {IUUPSProxy} from "./IUUPSProxy.sol";
 
 contract UUPSProxy is Proxy, IUUPSProxy {
     using StorageSlot for bytes32;
-    using SlotDerivation for bytes32;
     using SlotDerivation for string;
 
-    string internal constant _VERIFICATION_SLOT = "eth.ens.proxy.verifiable";
-    string internal constant _SALT = "salt";
+    string internal constant _SALT_SLOT = "eth.ens.proxy.verifiable.salt";
 
     // immutable variable (in bytecode)
     address public immutable verifiableProxyFactory;
@@ -59,13 +57,11 @@ contract UUPSProxy is Proxy, IUUPSProxy {
     }
 
     function _getSalt() internal view returns (bytes32) {
-        bytes32 baseSlot = _VERIFICATION_SLOT.erc7201Slot();
-        return baseSlot.deriveMapping(_SALT).getBytes32Slot().value;
+        return _SALT_SLOT.erc7201Slot().getBytes32Slot().value;
     }
 
     function _setSalt(bytes32 _salt) internal {
-        bytes32 baseSlot = _VERIFICATION_SLOT.erc7201Slot();
-        baseSlot.deriveMapping(_SALT).getBytes32Slot().value = _salt;
+        _SALT_SLOT.erc7201Slot().getBytes32Slot().value = _salt;
     }
 
     receive() external payable {}
