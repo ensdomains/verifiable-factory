@@ -19,8 +19,9 @@ contract UUPSProxy is Proxy, IUUPSProxy {
     // immutable variable (in bytecode)
     address public immutable verifiableProxyFactory;
 
-    constructor(address _factory) {
+    constructor(address _factory, bytes32 _salt) {
         verifiableProxyFactory = _factory;
+        _setSalt(_salt);
     }
 
     /**
@@ -33,10 +34,9 @@ contract UUPSProxy is Proxy, IUUPSProxy {
      *
      * - If `data` is empty, `msg.value` must be zero.
      */
-    function initialize(bytes32 _salt, address implementation, bytes memory data) public payable {
+    function initialize(address implementation, bytes memory data) public payable {
         require(implementation != address(0), "New implementation cannot be the zero address");
         require(_implementation() == address(0), "Already initialized");
-        _setSalt(_salt);
 
         ERC1967Utils.upgradeToAndCall(implementation, data);
     }

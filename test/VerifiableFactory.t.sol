@@ -287,7 +287,7 @@ contract VerifiableFactoryTest is Test {
     function computeExpectedAddress(uint256 salt) internal view returns (address) {
         bytes32 outerSalt = keccak256(abi.encode(owner, salt));
 
-        bytes memory bytecode = abi.encodePacked(type(UUPSProxy).creationCode, abi.encode(address(factory)));
+        bytes memory bytecode = abi.encodePacked(type(UUPSProxy).creationCode, abi.encode(address(factory), outerSalt));
 
         return Create2.computeAddress(outerSalt, keccak256(bytecode), address(factory));
     }

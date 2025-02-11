@@ -30,11 +30,11 @@ contract VerifiableFactory {
     function deployProxy(address implementation, uint256 salt, bytes memory data) external returns (address) {
         bytes32 outerSalt = keccak256(abi.encode(msg.sender, salt));
 
-        UUPSProxy proxy = new UUPSProxy{salt: outerSalt}(address(this));
+        UUPSProxy proxy = new UUPSProxy{salt: outerSalt}(address(this), outerSalt);
 
         require(isContract(address(proxy)), "Proxy deployment failed");
 
-        proxy.initialize(outerSalt, implementation, data);
+        proxy.initialize(implementation, data);
 
         emit ProxyDeployed(msg.sender, address(proxy), salt, implementation);
         return address(proxy);
@@ -63,7 +63,7 @@ contract VerifiableFactory {
 
     function _verifyContract(address proxy, bytes32 salt) private view returns (bool) {
         // get creation bytecode with constructor arguments
-        bytes memory bytecode = abi.encodePacked(type(UUPSProxy).creationCode, abi.encode(address(this)));
+        bytes memory bytecode = abi.encodePacked(type(UUPSProxy).creationCode, abi.encode(address(this), salt));
 
         address expectedProxyAddress = Create2.computeAddress(salt, keccak256(bytecode), address(this));
 

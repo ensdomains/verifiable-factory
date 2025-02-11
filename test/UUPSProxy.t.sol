@@ -21,13 +21,13 @@ contract UUPSProxyTest is Test {
     string internal constant _SALT_SLOT = "eth.ens.proxy.verifiable.salt";
 
     function setUp() public {
-        proxy = new UUPSProxy(factory);
+        proxy = new UUPSProxy(factory, salt);
     }
 
     function testInitialize() public {
         // initialize the proxy
         vm.prank(factory);
-        proxy.initialize(salt, implementation, emptyData);
+        proxy.initialize(implementation, emptyData);
 
         // check salt and owner values
         assertEq(proxy.getVerifiableProxySalt(), salt, "Salt mismatch");
@@ -36,7 +36,7 @@ contract UUPSProxyTest is Test {
     function testSaltStorage() public {
         // initialize the proxy
         vm.prank(factory);
-        proxy.initialize(salt, implementation, emptyData);
+        proxy.initialize(implementation, emptyData);
 
         // use SlotDerivation to compute the salt slot
         bytes32 saltSlot = _SALT_SLOT.erc7201Slot();
