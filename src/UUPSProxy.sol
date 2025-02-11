@@ -42,7 +42,7 @@ contract UUPSProxy is Proxy, IUUPSProxy {
     }
 
     function getVerifiableProxySalt() public view returns (bytes32) {
-        return _getSalt();
+        return _SALT_SLOT.erc7201Slot().getBytes32Slot().value;
     }
 
     /**
@@ -54,10 +54,6 @@ contract UUPSProxy is Proxy, IUUPSProxy {
      */
     function _implementation() internal view virtual override returns (address) {
         return ERC1967Utils.getImplementation();
-    }
-
-    function _getSalt() internal view returns (bytes32) {
-        return _SALT_SLOT.erc7201Slot().getBytes32Slot().value;
     }
 
     function _setSalt(bytes32 _salt) internal {
