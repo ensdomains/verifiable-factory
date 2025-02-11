@@ -49,3 +49,75 @@ sequenceDiagram
     Implementation->>Implementation: Check caller is owner
     Implementation->>Implementation: Switch delegation target
 ```
+
+## Implementation Guide
+
+### Requirements
+1. Inherit UUPS compliance:
+```solidity
+import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
+
+contract MyContract is UUPSUpgradeable {
+
+  // ..rest of your own implementation
+```
+
+2. Use initializer instead of constructor:
+```solidity
+import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+
+contract MyContract is Initializable, UUPSUpgradeable {
+    // Implementation must follow UUPS upgrade pattern requirements
+
+    function initialize() public initializer {
+        // Initialize inherited UUPS contract
+        __UUPSUpgradeable_init()
+    }
+
+    // ..rest of your own implementation
+```
+
+3. Implement upgrade authorization:
+```solidity
+import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+
+contract MyContract is UUPSUpgradeable, OwnableUpgradeable {
+
+    // Mandatory security measure - define who can upgrade the contract
+    function _authorizeUpgrade(address) internal override onlyOwner {}
+
+    // ..rest of your own implementation
+```
+
+### Example Implementation
+
+```solidity
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.20;
+
+// Required UUPS imports
+import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+
+contract MyImplementation is UUPSUpgradeable, OwnableUpgradeable {
+    
+    uint256 public value;
+
+    // Initialization replaces constructor functionality
+    function initialize(uint256 initialValue) public initializer {
+        // Initialize parent contracts first
+        __Ownable_init(msg.sender);  // Sets initial owner
+        __UUPSUpgradeable_init();    // Required UUPS initialization
+        
+        // Custom initialization logic
+        value = initialValue;
+    }
+
+    // Critical security function - defines upgrade permissions
+    // Using onlyOwner modifier ensures only the designated owner can authorize contract upgrades
+    function _authorizeUpgrade(address) internal override onlyOwner {}
+
+    // ..rest of your own implementation
+}
+```
+
