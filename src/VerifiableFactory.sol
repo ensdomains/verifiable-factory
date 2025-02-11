@@ -3,16 +3,15 @@ pragma solidity ^0.8.20;
 
 import {console} from "forge-std/console.sol";
 import {Create2} from "@openzeppelin/contracts/utils/Create2.sol";
-import {TransparentVerifiableProxy} from "./TransparentVerifiableProxy.sol";
-import {ITransparentVerifiableProxy} from "./ITransparentVerifiableProxy.sol";
+
+import {UUPSProxy} from "./UUPSProxy.sol";
+import {IUUPSProxy} from "./IUUPSProxy.sol";
 
 contract VerifiableFactory {
     event ProxyDeployed(address indexed sender, address indexed proxyAddress, uint256 salt, address implementation);
 
-    constructor() {}
-
     /**
-     * @dev Deploys a new `TransparentVerifiableProxy` contract at a deterministic address.
+     * @dev Deploys a new `UUPSProxy` contract at a deterministic address.
      *
      * This function deploys a proxy contract using the CREATE2 opcode, ensuring a predictable
      * address based on the sender's address and a provided salt. The deployed proxy is
@@ -26,28 +25,19 @@ contract VerifiableFactory {
      *
      * @param implementation The address of the contract implementation the proxy will delegate calls to.
      * @param salt A value provided by the caller to ensure uniqueness of the proxy address.
-     * @return proxy The address of the deployed `TransparentVerifiableProxy`.
+     * @return proxy The address of the deployed `UUPSProxy`.
      */
-    function deployProxy(address implementation, uint256 salt) external returns (address) {
+    function deployProxy(address implementation, uint256 salt, bytes memory data) external returns (address) {
         bytes32 outerSalt = keccak256(abi.encode(msg.sender, salt));
 
-        TransparentVerifiableProxy proxy = new TransparentVerifiableProxy{salt: outerSalt}(address(this));
+        UUPSProxy proxy = new UUPSProxy{salt: outerSalt}(address(this), outerSalt);
 
         require(isContract(address(proxy)), "Proxy deployment failed");
 
-        proxy.initialize(salt, msg.sender, implementation, "");
+        proxy.initialize(implementation, data);
 
         emit ProxyDeployed(msg.sender, address(proxy), salt, implementation);
         return address(proxy);
-    }
-
-    // Function to upgrade the proxy's implementation (only owner of proxy can call this)
-    function upgradeImplementation(address proxyAddress, address newImplementation, bytes memory data) external {
-        address owner = ITransparentVerifiableProxy(proxyAddress).owner();
-        require(owner == msg.sender, "Only the owner can upgrade");
-
-        // Upgrade the proxy to point to the new implementation
-        ITransparentVerifiableProxy(payable(proxyAddress)).upgradeToAndCall(newImplementation, data);
     }
 
     /**
@@ -64,24 +54,18 @@ contract VerifiableFactory {
         if (!isContract(proxy)) {
             return false;
         }
-        try ITransparentVerifiableProxy(proxy).salt() returns (uint256 salt) {
-            try ITransparentVerifiableProxy(proxy).owner() returns (address owner) {
-                return _verifyContract(proxy, owner, salt);
-            } catch {}
+        try IUUPSProxy(proxy).getVerifiableProxySalt() returns (bytes32 salt) {
+            return _verifyContract(proxy, salt);
         } catch {}
 
         return false;
     }
 
-    function _verifyContract(address proxy, address owner, uint256 salt) private view returns (bool) {
-        // reconstruct the address using CREATE2 and verify it matches
-        bytes32 outerSalt = keccak256(abi.encode(owner, salt));
-
+    function _verifyContract(address proxy, bytes32 salt) private view returns (bool) {
         // get creation bytecode with constructor arguments
-        bytes memory bytecode =
-            abi.encodePacked(type(TransparentVerifiableProxy).creationCode, abi.encode(address(this)));
+        bytes memory bytecode = abi.encodePacked(type(UUPSProxy).creationCode, abi.encode(address(this), salt));
 
-        address expectedProxyAddress = Create2.computeAddress(outerSalt, keccak256(bytecode), address(this));
+        address expectedProxyAddress = Create2.computeAddress(salt, keccak256(bytecode), address(this));
 
         return expectedProxyAddress == proxy;
     }
