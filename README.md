@@ -84,7 +84,7 @@ import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 contract MyContract is UUPSUpgradeable, OwnableUpgradeable {
 
     // Mandatory security measure - define who can upgrade the contract
-    function _authorizeUpgrade(address) internal override onlyOwner {}
+    function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
 
     // ..rest of your own implementation
 ```
@@ -99,14 +99,14 @@ pragma solidity ^0.8.20;
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 
-contract MyImplementation is UUPSUpgradeable, OwnableUpgradeable {
+contract MyImplementationV1 is UUPSUpgradeable, OwnableUpgradeable {
     
     uint256 public value;
 
     // Initialization replaces constructor functionality
-    function initialize(uint256 initialValue) public initializer {
+    function initialize(address owner, uint256 initialValue) public initializer {
         // Initialize parent contracts first
-        __Ownable_init(msg.sender);  // Sets initial owner
+        __Ownable_init(owner);       // Sets initial owner
         __UUPSUpgradeable_init();    // Required UUPS initialization
         
         // Custom initialization logic
@@ -115,9 +115,47 @@ contract MyImplementation is UUPSUpgradeable, OwnableUpgradeable {
 
     // Critical security function - defines upgrade permissions
     // Using onlyOwner modifier ensures only the designated owner can authorize contract upgrades
-    function _authorizeUpgrade(address) internal override onlyOwner {}
+    function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
 
     // ..rest of your own implementation
 }
 ```
 
+### Example Implementation Upgrade
+
+```solidity
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.20;
+
+import "./MyImplementationV1.sol";
+
+contract MyImplementationV2 is MyImplementationV1 {
+
+    uint256 public value;
+    
+    function postUpgradeSetup(uint256 upgradedValue) external onlyOwner {
+        value = upgradedValue;
+    }
+}
+```
+
+### Post-Upgrade Hooks
+To execute logic after an upgrade, use data parameter in upgradeToAndCall pattern:
+
+```solidity
+// initial values based on example implementation
+// address owner = address(0x..)
+// uint256 initialValue = 6174; 
+
+// In your deploy script
+bytes memory initData = abi.encodeWithSelector(MyImplementationV1.initialize.selector, owner, initialValue);
+address proxyAddress = factory.deployProxy(address(implementation), salt, initData);
+
+MockRegistryV1 proxyV1 = MockRegistryV1(proxyAddress);
+
+// uint256 upgradedValue = 1729;
+
+// In your upgrade script (owner wallet calls)
+bytes memory callData = abi.encodeWithSelector(MyImplementationV2.postUpgradeSetup.selector, upgradedValue);
+proxyV1.upgradeToAndCall(address(newImplementation), callData);
+```
