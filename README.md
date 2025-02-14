@@ -142,7 +142,13 @@ contract MyImplementationV2 is MyImplementationV1 {
 ```
 
 ### Post-Upgrade Hooks
-To execute logic after an upgrade, use data parameter in upgradeToAndCall pattern:
+
+To execute logic after an upgrade, use `data` parameter in `upgradeToAndCall` pattern.
+
+The `upgradeToAndCall` pattern allows executing any function on the new implementation:
+- Calls are made via `DELEGATECALL` from the proxy, so `msg.sender` will refer to the original sender in hook functions, while `address(this)` will refer to the proxy address.
+- Storage modifications affect the proxy's state
+- Caller must follow the authorization rules as implemented in the implementation contract
 
 ```solidity
 // initial values based on example implementation
