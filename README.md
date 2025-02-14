@@ -84,6 +84,8 @@ import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 contract MyContract is UUPSUpgradeable, OwnableUpgradeable {
 
     // Mandatory security measure - define who can upgrade the contract
+    // This function is executed on the CURRENT implementation (old contract)
+    // during the upgrade process. It verifies permissions before switching implementations.
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
 
     // ..rest of your own implementation
