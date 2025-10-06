@@ -48,7 +48,7 @@ contract UUPSProxy is Proxy, IUUPSProxy {
         return (_SALT_SLOT.erc7201Slot().getBytes32Slot().value, _implementation());
     }
 
-    function upgradeToAndCall(address newImplementation, bytes memory /*data*/) public payable {
+    function upgradeToAndCall(address newImplementation, bytes memory /*data*/ ) public payable {
         if (newImplementation == address(0)) revert ImplementationCannotBeZeroAddress();
         if (_implementation() == address(0)) revert ImplementationNotSet();
 
@@ -102,12 +102,8 @@ contract UUPSProxy is Proxy, IUUPSProxy {
 
             switch result
             // delegatecall returns 0 on error.
-            case 0 {
-                revert(0, returndatasize())
-            }
-            default {
-                return(0, returndatasize())
-            }
+            case 0 { revert(0, returndatasize()) }
+            default { return(0, returndatasize()) }
         }
     }
 

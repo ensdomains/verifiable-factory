@@ -112,7 +112,7 @@ contract UUPSProxyTest is Test {
         vm.store(address(proxy), saltSlot, computedSalt);
 
         // verify the updated salt
-        (bytes32 actualSalt, ) = proxy.getVerifiableProxyData();
+        (bytes32 actualSalt,) = proxy.getVerifiableProxyData();
         assertEq(actualSalt, computedSalt, "Salt update failed");
     }
 
@@ -148,8 +148,7 @@ contract UUPSProxyTest is Test {
     function test_UpgradeToAndCall_UnauthorizedUpgrade() public {
         vm.prank(factory);
         proxy.initialize(
-            address(mockProxyAuthorization),
-            abi.encodeWithSelector(MockRegistry.initialize.selector, owner)
+            address(mockProxyAuthorization), abi.encodeWithSelector(MockRegistry.initialize.selector, owner)
         );
 
         vm.prank(maliciousUser);
@@ -164,8 +163,7 @@ contract UUPSProxyTest is Test {
         vm.prank(owner);
         vm.expectRevert(abi.encodeWithSelector(IUUPSProxy.InvalidUpgradeTargetForCurrentImplementation.selector));
         proxy.upgradeToAndCall(
-            address(mockProxyAuthorization),
-            abi.encodeWithSelector(MockRegistry.initialize.selector, owner)
+            address(mockProxyAuthorization), abi.encodeWithSelector(MockRegistry.initialize.selector, owner)
         );
     }
 
