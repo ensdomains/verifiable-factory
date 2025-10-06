@@ -4,6 +4,7 @@ pragma solidity ^0.8.20;
 import {Test, console2} from "forge-std/Test.sol";
 import {Create2} from "@openzeppelin/contracts/utils/Create2.sol";
 import {OwnableUpgradeable, Initializable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import {ERC1967Utils} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Utils.sol";
 
 import {VerifiableFactory} from "../src/VerifiableFactory.sol";
 import {IVerifiableFactory} from "../src/IVerifiableFactory.sol";
@@ -87,6 +88,16 @@ contract VerifiableFactoryTest is Test {
         vm.expectRevert(bytes(""));
         factory.deployProxy(address(implementation), salt, emptyData);
 
+        vm.stopPrank();
+    }
+
+    function test_DeployProxyWithEmptyBytecode() public {
+        uint256 salt = 1;
+        vm.startPrank(owner);
+        vm.expectRevert(
+            abi.encodeWithSelector(ERC1967Utils.ERC1967InvalidImplementation.selector, address(maliciousUser))
+        );
+        factory.deployProxy(address(maliciousUser), salt, emptyData);
         vm.stopPrank();
     }
 
