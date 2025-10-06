@@ -7,6 +7,7 @@ pragma solidity ^0.8.20;
 
 import {Proxy} from "@openzeppelin/contracts/proxy/Proxy.sol";
 import {ERC1967Utils, StorageSlot} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Utils.sol";
+import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import {SlotDerivation} from "@openzeppelin/contracts/utils/SlotDerivation.sol";
 
 import {IProxyAuthorization} from "./IProxyAuthorization.sol";
@@ -47,16 +48,15 @@ contract UUPSProxy is Proxy, IUUPSProxy {
         return _SALT_SLOT.erc7201Slot().getBytes32Slot().value;
     }
 
-    function upgradeToAndCall(address implementation, bytes memory data) public payable {
+    function upgradeToAndCall(address newImplementation, bytes memory /*data*/) public payable {
         require(_implementation() != address(0), "Implementation not set");
 
-        IProxyAuthorization currentImpl = IProxyAuthorization(address(this));
-        IProxyAuthorization newImpl = IProxyAuthorization(implementation);
+        IProxyAuthorization newImpl = IProxyAuthorization(newImplementation);
 
-        require(currentImpl.isAuthorizedToUpgrade(msg.sender), "Not authorized to upgrade");
         require(newImpl.canUpgradeFrom(_implementation()), "Cannot upgrade from this implementation");
 
-        ERC1967Utils.upgradeToAndCall(implementation, data);
+        // forward the call to the implementation
+        _delegate(_implementation(), false);
     }
 
     /**
@@ -74,7 +74,7 @@ contract UUPSProxy is Proxy, IUUPSProxy {
         _SALT_SLOT.erc7201Slot().getBytes32Slot().value = _salt;
     }
 
-    function _delegate(address implementation) internal virtual override {
+    function _delegate(address implementation, bool checkImplementation) internal {
         bytes32 implementationSlot = ERC1967Utils.IMPLEMENTATION_SLOT;
         assembly {
             // Copy msg.data. We take full control of memory in this inline assembly
@@ -89,7 +89,7 @@ contract UUPSProxy is Proxy, IUUPSProxy {
             // check if implementation has changed
             let implAfter := sload(implementationSlot)
 
-            if iszero(eq(implAfter, implementation)) {
+            if and(checkImplementation, iszero(eq(implAfter, implementation))) {
                 revert(0, 0)
             }
 
@@ -105,6 +105,10 @@ contract UUPSProxy is Proxy, IUUPSProxy {
                 return(0, returndatasize())
             }
         }
+    }
+
+    function _fallback() internal virtual override {
+        _delegate(_implementation());
     }
 
     receive() external payable {}

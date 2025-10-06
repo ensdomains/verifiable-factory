@@ -7,30 +7,27 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {SlotDerivation} from "@openzeppelin/contracts/utils/SlotDerivation.sol";
 import {ERC1967Utils} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Utils.sol";
 import {StorageSlot} from "@openzeppelin/contracts/utils/StorageSlot.sol";
+import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import {MockRegistry} from "../src/mock/MockRegistry.sol";
 
-contract MockProxyAuthorization is IProxyAuthorization, Ownable {
+contract MockProxyAuthorization is IProxyAuthorization, Ownable, UUPSUpgradeable {
     address allowedPreviousImpl;
 
     constructor(address initialOwner, address allowedPreviousImpl_) Ownable(initialOwner) {
         allowedPreviousImpl = allowedPreviousImpl_;
     }
 
-    function isAuthorizedToUpgrade(address caller) external view returns (bool) {
-        return owner() == caller;
-    }
+    function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
 
     function canUpgradeFrom(address previousImplementation) external view returns (bool) {
         return previousImplementation == allowedPreviousImpl;
     }
 }
 
-contract MaliciousProxyAuthorization is IProxyAuthorization, Ownable {
+contract MaliciousProxyAuthorization is IProxyAuthorization, Ownable, UUPSUpgradeable {
     constructor(address initialOwner) Ownable(initialOwner) {}
 
-    function isAuthorizedToUpgrade(address caller) external view returns (bool) {
-        return true;
-    }
+    function _authorizeUpgrade(address newImplementation) internal override {}
 
     function canUpgradeFrom(address previousImplementation) external view returns (bool) {
         return true;
@@ -94,8 +91,6 @@ contract UUPSProxyTest is Test {
         vm.prank(factory);
         proxy.initialize(implementation, abi.encodeWithSelector(MockRegistry.initialize.selector, owner));
         vm.stopPrank();
-
-        console.logAddress(MockRegistry(address(proxy)).owner());
 
         // upgrade to proxy authorization
         vm.prank(owner);

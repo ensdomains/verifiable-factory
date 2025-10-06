@@ -99,7 +99,7 @@ contract VerifiableFactoryTest is Test {
 
         // try to upgrade as non-owner (should fail)
         vm.prank(maliciousUser);
-        vm.expectRevert("Not authorized to upgrade");
+        vm.expectRevert(abi.encodeWithSelector(OwnableUpgradeable.OwnableUnauthorizedAccount.selector, maliciousUser));
         proxyV1.upgradeToAndCall(
             address(implementationV2),
             "" // add upgrade data if we need

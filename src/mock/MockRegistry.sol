@@ -18,10 +18,6 @@ contract MockRegistry is UUPSUpgradeable, OwnableUpgradeable, IProxyAuthorizatio
     event AddressRegistered(address indexed account);
     event AddressUnregistered(address indexed account);
 
-    function isAuthorizedToUpgrade(address caller) external view virtual returns (bool) {
-        return owner() == caller;
-    }
-
     function canUpgradeFrom(address previousImplementation) external view virtual returns (bool) {
         return true;
     }
