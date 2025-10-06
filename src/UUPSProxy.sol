@@ -108,7 +108,7 @@ contract UUPSProxy is Proxy, IUUPSProxy {
     }
 
     function _fallback() internal virtual override {
-        _delegate(_implementation());
+        _delegate(_implementation(), true);
     }
 
     receive() external payable {}
