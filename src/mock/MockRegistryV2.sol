@@ -10,9 +10,7 @@ contract MockRegistryV2 is MockRegistry {
         previousImpl = _previousImpl;
     }
 
-    function canUpgradeFrom(
-        address previousImplementation
-    ) external view override returns (bool) {
+    function canUpgradeFrom(address previousImplementation) external view override returns (bool) {
         return previousImplementation == previousImpl;
     }
 

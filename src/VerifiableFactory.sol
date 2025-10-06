@@ -57,7 +57,6 @@ contract VerifiableFactory {
         try IUUPSProxy(proxy).getVerifiableProxySalt() returns (bytes32 salt) {
             return _verifyContract(proxy, salt);
         } catch {}
-
         return false;
     }
 

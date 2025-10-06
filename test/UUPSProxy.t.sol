@@ -5,31 +5,22 @@ import "forge-std/Test.sol";
 import "../src/UUPSProxy.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {SlotDerivation} from "@openzeppelin/contracts/utils/SlotDerivation.sol";
-import {
-    ERC1967Utils
-} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Utils.sol";
+import {ERC1967Utils} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Utils.sol";
 import {StorageSlot} from "@openzeppelin/contracts/utils/StorageSlot.sol";
 import {MockRegistry} from "../src/mock/MockRegistry.sol";
 
 contract MockProxyAuthorization is IProxyAuthorization, Ownable {
     address allowedPreviousImpl;
 
-    constructor(
-        address initialOwner,
-        address allowedPreviousImpl_
-    ) Ownable(initialOwner) {
+    constructor(address initialOwner, address allowedPreviousImpl_) Ownable(initialOwner) {
         allowedPreviousImpl = allowedPreviousImpl_;
     }
 
-    function isAuthorizedToUpgrade(
-        address caller
-    ) external view returns (bool) {
+    function isAuthorizedToUpgrade(address caller) external view returns (bool) {
         return owner() == caller;
     }
 
-    function canUpgradeFrom(
-        address previousImplementation
-    ) external view returns (bool) {
+    function canUpgradeFrom(address previousImplementation) external view returns (bool) {
         return previousImplementation == allowedPreviousImpl;
     }
 }
@@ -37,22 +28,16 @@ contract MockProxyAuthorization is IProxyAuthorization, Ownable {
 contract MaliciousProxyAuthorization is IProxyAuthorization, Ownable {
     constructor(address initialOwner) Ownable(initialOwner) {}
 
-    function isAuthorizedToUpgrade(
-        address caller
-    ) external view returns (bool) {
+    function isAuthorizedToUpgrade(address caller) external view returns (bool) {
         return true;
     }
 
-    function canUpgradeFrom(
-        address previousImplementation
-    ) external view returns (bool) {
+    function canUpgradeFrom(address previousImplementation) external view returns (bool) {
         return true;
     }
 
     function changeImplementation(address newImplementation) external {
-        StorageSlot
-            .getAddressSlot(ERC1967Utils.IMPLEMENTATION_SLOT)
-            .value = newImplementation;
+        StorageSlot.getAddressSlot(ERC1967Utils.IMPLEMENTATION_SLOT).value = newImplementation;
     }
 }
 
@@ -74,10 +59,7 @@ contract UUPSProxyTest is Test {
 
     function setUp() public {
         proxy = new UUPSProxy(factory, salt);
-        mockProxyAuthorization = new MockProxyAuthorization(
-            owner,
-            address(implementation)
-        );
+        mockProxyAuthorization = new MockProxyAuthorization(owner, address(implementation));
         maliciousProxyAuthorization = new MaliciousProxyAuthorization(owner);
     }
 
@@ -104,20 +86,13 @@ contract UUPSProxyTest is Test {
         vm.store(address(proxy), saltSlot, computedSalt);
 
         // verify the updated salt
-        assertEq(
-            proxy.getVerifiableProxySalt(),
-            computedSalt,
-            "Salt update failed"
-        );
+        assertEq(proxy.getVerifiableProxySalt(), computedSalt, "Salt update failed");
     }
 
     function testUpgradeToAndCall() public {
         // initialize the proxy
         vm.prank(factory);
-        proxy.initialize(
-            implementation,
-            abi.encodeWithSelector(MockRegistry.initialize.selector, owner)
-        );
+        proxy.initialize(implementation, abi.encodeWithSelector(MockRegistry.initialize.selector, owner));
         vm.stopPrank();
 
         console.logAddress(MockRegistry(address(proxy)).owner());
@@ -151,8 +126,6 @@ contract UUPSProxyTest is Test {
         // change the implementation
         vm.prank(owner);
         vm.expectRevert();
-        MaliciousProxyAuthorization(address(proxy)).changeImplementation(
-            address(implementation)
-        );
+        MaliciousProxyAuthorization(address(proxy)).changeImplementation(address(implementation));
     }
 }

@@ -1,12 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import {
-    UUPSUpgradeable
-} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
-import {
-    OwnableUpgradeable
-} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
+import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 
 import {IProxyAuthorization} from "../IProxyAuthorization.sol";
 
@@ -14,11 +10,7 @@ import {IProxyAuthorization} from "../IProxyAuthorization.sol";
  * @title MockRegistry
  * @dev Simulates a registry implementation for testing
  */
-contract MockRegistry is
-    UUPSUpgradeable,
-    OwnableUpgradeable,
-    IProxyAuthorization
-{
+contract MockRegistry is UUPSUpgradeable, OwnableUpgradeable, IProxyAuthorization {
     mapping(address => bool) public registeredAddresses;
     uint256 public constant version = 1;
 
@@ -26,21 +18,15 @@ contract MockRegistry is
     event AddressRegistered(address indexed account);
     event AddressUnregistered(address indexed account);
 
-    function isAuthorizedToUpgrade(
-        address caller
-    ) external view virtual returns (bool) {
+    function isAuthorizedToUpgrade(address caller) external view virtual returns (bool) {
         return owner() == caller;
     }
 
-    function canUpgradeFrom(
-        address previousImplementation
-    ) external view virtual returns (bool) {
+    function canUpgradeFrom(address previousImplementation) external view virtual returns (bool) {
         return true;
     }
 
-    function _authorizeUpgrade(
-        address newImplementation
-    ) internal override onlyOwner {}
+    function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
 
     function initialize(address _owner) public initializer {
         __Ownable_init(_owner); // Initialize Ownable
