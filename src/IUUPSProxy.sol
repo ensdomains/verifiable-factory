@@ -12,7 +12,7 @@ interface IUUPSProxy {
 
     error UpgradeNotAllowedInContext();
 
-    function getVerifiableProxySalt() external view returns (bytes32);
+    function getVerifiableProxyData() external view returns (bytes32 salt, address implementation);
 
     function verifiableProxyFactory() external view returns (address);
 }

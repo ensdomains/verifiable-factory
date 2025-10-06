@@ -77,7 +77,9 @@ contract UUPSProxyTest is Test {
         proxy.initialize(implementation, abi.encodeWithSelector(MockRegistry.initialize.selector, owner));
 
         // check salt and owner values
-        assertEq(proxy.getVerifiableProxySalt(), salt, "Salt mismatch");
+        (bytes32 actualSalt, address actualImplementation) = proxy.getVerifiableProxyData();
+        assertEq(actualSalt, salt, "Salt mismatch");
+        assertEq(actualImplementation, implementation, "Implementation mismatch");
         assertEq(MockRegistry(address(proxy)).owner(), owner, "Owner mismatch");
     }
 
@@ -110,7 +112,8 @@ contract UUPSProxyTest is Test {
         vm.store(address(proxy), saltSlot, computedSalt);
 
         // verify the updated salt
-        assertEq(proxy.getVerifiableProxySalt(), computedSalt, "Salt update failed");
+        (bytes32 actualSalt, ) = proxy.getVerifiableProxyData();
+        assertEq(actualSalt, computedSalt, "Salt update failed");
     }
 
     function test_UpgradeToAndCall() public {
@@ -123,11 +126,8 @@ contract UUPSProxyTest is Test {
         proxy.upgradeToAndCall(address(mockProxyAuthorization), emptyData);
 
         // verify the upgrade
-        assertEq(
-            vm.load(address(proxy), ERC1967Utils.IMPLEMENTATION_SLOT),
-            bytes32(uint256(uint160(address(mockProxyAuthorization)))),
-            "Upgrade failed"
-        );
+        (, address actualImplementation) = proxy.getVerifiableProxyData();
+        assertEq(actualImplementation, address(mockProxyAuthorization), "Upgrade failed");
     }
 
     function test_UpgradeToAndCall_ZeroAddress() public {

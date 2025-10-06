@@ -44,8 +44,8 @@ contract UUPSProxy is Proxy, IUUPSProxy {
         ERC1967Utils.upgradeToAndCall(implementation, data);
     }
 
-    function getVerifiableProxySalt() public view returns (bytes32) {
-        return _SALT_SLOT.erc7201Slot().getBytes32Slot().value;
+    function getVerifiableProxyData() public view returns (bytes32 salt, address implementation) {
+        return (_SALT_SLOT.erc7201Slot().getBytes32Slot().value, _implementation());
     }
 
     function upgradeToAndCall(address newImplementation, bytes memory /*data*/) public payable {

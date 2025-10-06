@@ -6,6 +6,7 @@ import {Create2} from "@openzeppelin/contracts/utils/Create2.sol";
 import {OwnableUpgradeable, Initializable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 
 import {VerifiableFactory} from "../src/VerifiableFactory.sol";
+import {IVerifiableFactory} from "../src/IVerifiableFactory.sol";
 import {UUPSProxy} from "../src/UUPSProxy.sol";
 import {IUUPSProxy} from "../src/IUUPSProxy.sol";
 import {MockRegistry} from "../src/mock/MockRegistry.sol";
@@ -69,7 +70,9 @@ contract VerifiableFactoryTest is Test {
         // verify proxy state
         UUPSProxy proxy = UUPSProxy(payable(proxyAddress));
         bytes32 computedSalt = keccak256(abi.encode(owner, salt));
-        assertEq(proxy.getVerifiableProxySalt(), computedSalt, "Proxy salt mismatch");
+        (bytes32 actualSalt, address actualImplementation) = proxy.getVerifiableProxyData();
+        assertEq(actualSalt, computedSalt, "Proxy salt mismatch");
+        assertEq(actualImplementation, address(implementation), "Implementation mismatch");
         assertEq(proxy.verifiableProxyFactory(), address(factory), "Proxy factory mismatch");
     }
 
@@ -159,14 +162,27 @@ contract VerifiableFactoryTest is Test {
 
         vm.prank(owner);
         // verify the contract
-        bool isVerified = factory.verifyContract(proxyAddress);
+        bool isVerified = factory.verifyContract(proxyAddress, address(implementation));
         assertTrue(isVerified, "Contract verification failed");
 
         vm.prank(owner);
         // try to verify non-existent contract
         address randomAddress = makeAddr("random");
-        bool shouldBeFalse = factory.verifyContract(randomAddress);
+        bool shouldBeFalse = factory.verifyContract(randomAddress, address(implementation));
         assertFalse(shouldBeFalse, "Non-existent contract should not verify");
+    }
+
+    function test_VerifyContract_WrongImplementation() public {
+        uint256 salt = 1;
+
+        // deploy proxy
+        vm.prank(owner);
+        address proxyAddress = factory.deployProxy(address(implementation), salt, emptyData);
+
+        vm.prank(owner);
+        // verify the contract
+        bool isVerified = factory.verifyContract(proxyAddress, address(implementationV2));
+        assertFalse(isVerified, "Contract verification should fail");
     }
 
     function test_ProxyInitialization() public {
@@ -180,7 +196,9 @@ contract VerifiableFactoryTest is Test {
         UUPSProxy proxy = UUPSProxy(payable(proxyAddress));
 
         bytes32 computedSalt = keccak256(abi.encode(owner, salt));
-        assertEq(proxy.getVerifiableProxySalt(), computedSalt, "Wrong salt");
+        (bytes32 actualSalt, address actualImplementation) = proxy.getVerifiableProxyData();
+        assertEq(actualSalt, computedSalt, "Wrong salt");
+        assertEq(actualImplementation, address(implementation), "Wrong implementation");
         assertEq(proxy.verifiableProxyFactory(), address(factory), "Wrong factory");
     }
 
@@ -245,7 +263,8 @@ contract VerifiableFactoryTest is Test {
         MockRegistry proxyRegistryV1 = MockRegistry(proxyAddress);
 
         bytes32 computedSalt = keccak256(abi.encode(owner, salt));
-        assertEq(proxy.getVerifiableProxySalt(), computedSalt, "Wrong proxy salt");
+        (bytes32 actualSalt, ) = proxy.getVerifiableProxyData();
+        assertEq(actualSalt, computedSalt, "Wrong proxy salt");
         assertEq(proxyRegistryV1.owner(), owner, "Wrong proxyRegistryV1 owner");
         assertEq(proxy.verifiableProxyFactory(), address(factory), "Wrong proxy factory");
     }
@@ -269,7 +288,8 @@ contract VerifiableFactoryTest is Test {
         // verify critical storage slots maintained
         UUPSProxy proxyInstance = UUPSProxy(payable(proxy));
         assertEq(proxyInstance.verifiableProxyFactory(), address(factory), "Factory ref corrupted");
-        assertEq(proxyInstance.getVerifiableProxySalt(), keccak256(abi.encode(owner, salt)), "Salt ref corrupted");
+        (bytes32 actualSalt, ) = proxyInstance.getVerifiableProxyData();
+        assertEq(actualSalt, keccak256(abi.encode(owner, salt)), "Salt ref corrupted");
     }
 
     function testFuzz_VerifyContract(uint256 salt) public {
@@ -283,7 +303,7 @@ contract VerifiableFactoryTest is Test {
         address proxy = factory.deployProxy(address(impl), salt, initData);
 
         // verification checks
-        bool verified = factory.verifyContract(proxy);
+        bool verified = factory.verifyContract(proxy, address(impl));
         assertTrue(verified, "Fuzz verification failed");
 
         // additional safety assertions
