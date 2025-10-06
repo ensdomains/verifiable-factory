@@ -38,8 +38,8 @@ contract UUPSProxy is Proxy, IUUPSProxy {
      * - If `data` is empty, `msg.value` must be zero.
      */
     function initialize(address implementation, bytes memory data) public payable {
-        require(implementation != address(0), "New implementation cannot be the zero address");
-        require(_implementation() == address(0), "Already initialized");
+        if (implementation == address(0)) revert ImplementationCannotBeZeroAddress();
+        if (_implementation() != address(0)) revert AlreadyInitialized();
 
         ERC1967Utils.upgradeToAndCall(implementation, data);
     }
@@ -49,11 +49,12 @@ contract UUPSProxy is Proxy, IUUPSProxy {
     }
 
     function upgradeToAndCall(address newImplementation, bytes memory /*data*/) public payable {
-        require(_implementation() != address(0), "Implementation not set");
+        if (newImplementation == address(0)) revert ImplementationCannotBeZeroAddress();
+        if (_implementation() == address(0)) revert ImplementationNotSet();
 
         IProxyAuthorization newImpl = IProxyAuthorization(newImplementation);
 
-        require(newImpl.canUpgradeFrom(_implementation()), "Cannot upgrade from this implementation");
+        if (!newImpl.canUpgradeFrom(_implementation())) revert InvalidUpgradeTargetForCurrentImplementation();
 
         // forward the call to the implementation
         _delegate(_implementation(), false);
@@ -76,6 +77,7 @@ contract UUPSProxy is Proxy, IUUPSProxy {
 
     function _delegate(address implementation, bool checkImplementation) internal {
         bytes32 implementationSlot = ERC1967Utils.IMPLEMENTATION_SLOT;
+        bytes4 errorSelector = IUUPSProxy.UpgradeNotAllowedInContext.selector;
         assembly {
             // Copy msg.data. We take full control of memory in this inline assembly
             // block because it will not return to Solidity code. We overwrite the
@@ -90,7 +92,9 @@ contract UUPSProxy is Proxy, IUUPSProxy {
             let implAfter := sload(implementationSlot)
 
             if and(checkImplementation, iszero(eq(implAfter, implementation))) {
-                revert(0, 0)
+                let ptr := mload(0x40)
+                mstore(ptr, errorSelector)
+                revert(ptr, 4)
             }
 
             // Copy the returned data.
