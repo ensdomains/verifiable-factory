@@ -98,24 +98,6 @@ contract UUPSProxyTest is Test {
         proxy.initialize(implementation, emptyData);
     }
 
-    function test_SaltStorage() public {
-        // initialize the proxy
-        vm.prank(factory);
-        proxy.initialize(implementation, emptyData);
-
-        // use SlotDerivation to compute the salt slot
-        bytes32 saltSlot = _SALT_SLOT.erc7201Slot();
-
-        // directly manipulate the storage for the salt
-        uint256 newSalt = 54321;
-        bytes32 computedSalt = keccak256(abi.encode(owner, newSalt));
-        vm.store(address(proxy), saltSlot, computedSalt);
-
-        // verify the updated salt
-        (bytes32 actualSalt, ) = proxy.getVerifiableProxyData();
-        assertEq(actualSalt, computedSalt, "Salt update failed");
-    }
-
     function test_UpgradeToAndCall() public {
         // initialize the proxy
         vm.prank(factory);

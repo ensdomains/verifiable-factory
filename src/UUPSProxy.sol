@@ -37,11 +37,11 @@ contract UUPSProxy is IUUPSProxy {
     // immutable variable (in bytecode)
     address public immutable verifiableProxyFactory;
 
+    bytes32 internal immutable _salt;
+
     constructor(address _factory, bytes32 salt_) {
         verifiableProxyFactory = _factory;
-        assembly ("memory-safe") {
-            sstore(_SALT_SLOT, salt_)
-        }
+        _salt = salt_;
     }
 
     /**
@@ -91,7 +91,7 @@ contract UUPSProxy is IUUPSProxy {
     }
 
     function getVerifiableProxyData() public view returns (bytes32 salt, address implementation) {
-        return (_salt(), _implementation());
+        return (_salt, _implementation());
     }
 
     function upgradeToAndCall(address newImplementation, bytes memory /*data*/) public payable {
@@ -117,12 +117,6 @@ contract UUPSProxy is IUUPSProxy {
     function _implementation() internal view returns (address impl) {
         assembly {
             impl := sload(_IMPLEMENTATION_SLOT)
-        }
-    }
-
-    function _salt() internal view returns (bytes32 salt) {
-        assembly {
-            salt := sload(_SALT_SLOT)
         }
     }
 
