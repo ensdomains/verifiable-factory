@@ -5,26 +5,43 @@
 // @ref: @openzeppelin/contracts/proxy/utils/UUPSUpgradeable.sol
 pragma solidity ^0.8.20;
 
-import {Proxy} from "@openzeppelin/contracts/proxy/Proxy.sol";
-import {ERC1967Utils, StorageSlot} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Utils.sol";
-import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
-import {SlotDerivation} from "@openzeppelin/contracts/utils/SlotDerivation.sol";
-
 import {IProxyAuthorization} from "./IProxyAuthorization.sol";
 import {IUUPSProxy} from "./IUUPSProxy.sol";
 
-contract UUPSProxy is Proxy, IUUPSProxy {
-    using StorageSlot for bytes32;
-    using SlotDerivation for string;
+contract UUPSProxy is IUUPSProxy {
+    /// @dev `keccak256(bytes("eth.ens.proxy.verifiable.salt"))`.
+    bytes32 internal constant _SALT_SLOT = 0xb5b0a4d9ccf39d6e791e14c03248a14f4288ec2ddf7c269443c96ac5f0b17100; // "eth.ens.proxy.verifiable.salt"
 
-    string internal constant _SALT_SLOT = "eth.ens.proxy.verifiable.salt";
+    /// @dev `keccak256(bytes("eip1967.proxy.implementation")) - 1`.
+    bytes32 internal constant _IMPLEMENTATION_SLOT = 0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc;
+
+    /// @dev `bytes4(keccak256(bytes("ImplementationCannotBeZeroAddress()")))`.
+    uint256 internal constant _IMPLEMENTATION_CANNOT_BE_ZERO_ADDRESS_ERROR_SELECTOR = 0x0760838f;
+
+    /// @dev `bytes4(keccak256(bytes("AlreadyInitialized()")))`.
+    uint256 internal constant _ALREADY_INITIALIZED_ERROR_SELECTOR = 0x0dc149f0;
+
+    /// @dev `bytes4(keccak256(bytes("UpgradeNotAllowedInContext()")))`.
+    uint256 internal constant _UPGRADE_NOT_ALLOWED_IN_CONTEXT_ERROR_SELECTOR = 0x784cf700;
+
+    /// @dev `bytes4(keccak256(bytes("ERC1967InvalidImplementation(address)")))`.
+    uint256 internal constant _ERC1967_INVALID_IMPLEMENTATION_ERROR_SELECTOR = 0x4c9c8ce3;
+
+    /// @dev `bytes4(keccak256(bytes("ERC1967NonPayable()")))`.
+    uint256 internal constant _ERC1967_NON_PAYABLE_ERROR_SELECTOR = 0xb398979f;
+
+    /// @dev `bytes4(keccak256(bytes("Upgraded(address)")))`.
+    uint256 internal constant _UPGRADED_EVENT_SELECTOR =
+        0xbc7cd75a20ee27fd9adebab32041f755214dbc6bffa90cc0225b39da2e5c2d3b;
 
     // immutable variable (in bytecode)
     address public immutable verifiableProxyFactory;
 
-    constructor(address _factory, bytes32 _salt) {
+    constructor(address _factory, bytes32 salt_) {
         verifiableProxyFactory = _factory;
-        _setSalt(_salt);
+        assembly ("memory-safe") {
+            sstore(_SALT_SLOT, salt_)
+        }
     }
 
     /**
@@ -38,23 +55,53 @@ contract UUPSProxy is Proxy, IUUPSProxy {
      * - If `data` is empty, `msg.value` must be zero.
      */
     function initialize(address implementation, bytes memory data) public payable {
-        if (implementation == address(0)) revert ImplementationCannotBeZeroAddress();
-        if (_implementation() != address(0)) revert AlreadyInitialized();
+        assembly {
+            if eq(implementation, 0) {
+                mstore(0, _IMPLEMENTATION_CANNOT_BE_ZERO_ADDRESS_ERROR_SELECTOR)
+                revert(0x1c, 0x04)
+            }
+            if iszero(eq(sload(_IMPLEMENTATION_SLOT), 0)) {
+                mstore(0, _ALREADY_INITIALIZED_ERROR_SELECTOR)
+                revert(0x1c, 0x04)
+            }
+            if iszero(extcodesize(implementation)) {
+                mstore(0, _ERC1967_INVALID_IMPLEMENTATION_ERROR_SELECTOR)
+                mstore(0x20, implementation)
+                revert(0x1c, 0x24)
+            }
+            sstore(_IMPLEMENTATION_SLOT, implementation)
+            log2(0, 0, _UPGRADED_EVENT_SELECTOR, implementation)
 
-        ERC1967Utils.upgradeToAndCall(implementation, data);
+            let dlength := mload(data)
+            switch dlength
+            case 0 {
+                if gt(0, callvalue()) {
+                    mstore(0, _ERC1967_NON_PAYABLE_ERROR_SELECTOR)
+                    revert(0x1c, 0x04)
+                }
+            }
+            default {
+                let result := delegatecall(gas(), implementation, add(data, 0x20), dlength, 0, 0)
+                if iszero(result) {
+                    returndatacopy(0, 0, returndatasize())
+                    revert(0, returndatasize())
+                }
+            }
+        }
     }
 
     function getVerifiableProxyData() public view returns (bytes32 salt, address implementation) {
-        return (_SALT_SLOT.erc7201Slot().getBytes32Slot().value, _implementation());
+        return (_salt(), _implementation());
     }
 
-    function upgradeToAndCall(address newImplementation, bytes memory /*data*/ ) public payable {
+    function upgradeToAndCall(address newImplementation, bytes memory /*data*/) public payable {
         if (newImplementation == address(0)) revert ImplementationCannotBeZeroAddress();
         if (_implementation() == address(0)) revert ImplementationNotSet();
 
         IProxyAuthorization newImpl = IProxyAuthorization(newImplementation);
 
-        if (!newImpl.canUpgradeFrom(_implementation())) revert InvalidUpgradeTargetForCurrentImplementation();
+        if (!newImpl.canUpgradeFrom(_implementation()))
+            revert InvalidUpgradeTarget(_implementation(), newImplementation);
 
         // forward the call to the implementation
         _delegate(_implementation(), false);
@@ -67,17 +114,19 @@ contract UUPSProxy is Proxy, IUUPSProxy {
      * the https://eth.wiki/json-rpc/API#eth_getstorageat[`eth_getStorageAt`] RPC call.
      * `0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc`
      */
-    function _implementation() internal view virtual override returns (address) {
-        return ERC1967Utils.getImplementation();
+    function _implementation() internal view returns (address impl) {
+        assembly {
+            impl := sload(_IMPLEMENTATION_SLOT)
+        }
     }
 
-    function _setSalt(bytes32 _salt) internal {
-        _SALT_SLOT.erc7201Slot().getBytes32Slot().value = _salt;
+    function _salt() internal view returns (bytes32 salt) {
+        assembly {
+            salt := sload(_SALT_SLOT)
+        }
     }
 
     function _delegate(address implementation, bool checkImplementation) internal {
-        bytes32 implementationSlot = ERC1967Utils.IMPLEMENTATION_SLOT;
-        bytes4 errorSelector = IUUPSProxy.UpgradeNotAllowedInContext.selector;
         assembly {
             // Copy msg.data. We take full control of memory in this inline assembly
             // block because it will not return to Solidity code. We overwrite the
@@ -89,12 +138,11 @@ contract UUPSProxy is Proxy, IUUPSProxy {
             let result := delegatecall(gas(), implementation, 0, calldatasize(), 0, 0)
 
             // check if implementation has changed
-            let implAfter := sload(implementationSlot)
+            let implAfter := sload(_IMPLEMENTATION_SLOT)
 
             if and(checkImplementation, iszero(eq(implAfter, implementation))) {
-                let ptr := mload(0x40)
-                mstore(ptr, errorSelector)
-                revert(ptr, 4)
+                mstore(0, _UPGRADE_NOT_ALLOWED_IN_CONTEXT_ERROR_SELECTOR)
+                revert(0x1c, 0x04)
             }
 
             // Copy the returned data.
@@ -102,12 +150,16 @@ contract UUPSProxy is Proxy, IUUPSProxy {
 
             switch result
             // delegatecall returns 0 on error.
-            case 0 { revert(0, returndatasize()) }
-            default { return(0, returndatasize()) }
+            case 0 {
+                revert(0, returndatasize())
+            }
+            default {
+                return(0, returndatasize())
+            }
         }
     }
 
-    function _fallback() internal virtual override {
+    fallback() external payable {
         _delegate(_implementation(), true);
     }
 

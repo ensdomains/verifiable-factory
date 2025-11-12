@@ -8,7 +8,7 @@ interface IUUPSProxy {
 
     error ImplementationNotSet();
 
-    error InvalidUpgradeTargetForCurrentImplementation();
+    error InvalidUpgradeTarget(address currentImplementation, address newImplementation);
 
     error UpgradeNotAllowedInContext();
 

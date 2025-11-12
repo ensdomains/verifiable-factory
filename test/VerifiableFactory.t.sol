@@ -274,7 +274,7 @@ contract VerifiableFactoryTest is Test {
         MockRegistry proxyRegistryV1 = MockRegistry(proxyAddress);
 
         bytes32 computedSalt = keccak256(abi.encode(owner, salt));
-        (bytes32 actualSalt,) = proxy.getVerifiableProxyData();
+        (bytes32 actualSalt, ) = proxy.getVerifiableProxyData();
         assertEq(actualSalt, computedSalt, "Wrong proxy salt");
         assertEq(proxyRegistryV1.owner(), owner, "Wrong proxyRegistryV1 owner");
         assertEq(proxy.verifiableProxyFactory(), address(factory), "Wrong proxy factory");
@@ -299,7 +299,7 @@ contract VerifiableFactoryTest is Test {
         // verify critical storage slots maintained
         UUPSProxy proxyInstance = UUPSProxy(payable(proxy));
         assertEq(proxyInstance.verifiableProxyFactory(), address(factory), "Factory ref corrupted");
-        (bytes32 actualSalt,) = proxyInstance.getVerifiableProxyData();
+        (bytes32 actualSalt, ) = proxyInstance.getVerifiableProxyData();
         assertEq(actualSalt, keccak256(abi.encode(owner, salt)), "Salt ref corrupted");
     }
 
