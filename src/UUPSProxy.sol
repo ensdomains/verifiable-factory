@@ -9,9 +9,6 @@ import {IProxyAuthorization} from "./IProxyAuthorization.sol";
 import {IUUPSProxy} from "./IUUPSProxy.sol";
 
 contract UUPSProxy is IUUPSProxy {
-    /// @dev `keccak256(bytes("eth.ens.proxy.verifiable.salt"))`.
-    bytes32 internal constant _SALT_SLOT = 0xb5b0a4d9ccf39d6e791e14c03248a14f4288ec2ddf7c269443c96ac5f0b17100; // "eth.ens.proxy.verifiable.salt"
-
     /// @dev `keccak256(bytes("eip1967.proxy.implementation")) - 1`.
     bytes32 internal constant _IMPLEMENTATION_SLOT = 0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc;
 
