@@ -91,14 +91,21 @@ contract UUPSProxy is IUUPSProxy {
         return (_salt, _implementation());
     }
 
-    function upgradeToAndCall(address newImplementation, bytes memory /*data*/) public payable {
+    function upgradeToAndCall(
+        address newImplementation,
+        bytes memory /*data*/
+    )
+        public
+        payable
+    {
         if (newImplementation == address(0)) revert ImplementationCannotBeZeroAddress();
         if (_implementation() == address(0)) revert ImplementationNotSet();
 
         IProxyAuthorization newImpl = IProxyAuthorization(newImplementation);
 
-        if (!newImpl.canUpgradeFrom(_implementation()))
+        if (!newImpl.canUpgradeFrom(_implementation())) {
             revert InvalidUpgradeTarget(_implementation(), newImplementation);
+        }
 
         // forward the call to the implementation
         _delegate(_implementation(), false);

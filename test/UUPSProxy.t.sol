@@ -130,8 +130,7 @@ contract UUPSProxyTest is Test {
     function test_UpgradeToAndCall_UnauthorizedUpgrade() public {
         vm.prank(factory);
         proxy.initialize(
-            address(mockProxyAuthorization),
-            abi.encodeWithSelector(MockRegistry.initialize.selector, owner)
+            address(mockProxyAuthorization), abi.encodeWithSelector(MockRegistry.initialize.selector, owner)
         );
 
         vm.prank(maliciousUser);
@@ -152,8 +151,7 @@ contract UUPSProxyTest is Test {
             )
         );
         proxy.upgradeToAndCall(
-            address(mockProxyAuthorization),
-            abi.encodeWithSelector(MockRegistry.initialize.selector, owner)
+            address(mockProxyAuthorization), abi.encodeWithSelector(MockRegistry.initialize.selector, owner)
         );
     }
 
