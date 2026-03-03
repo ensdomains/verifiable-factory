@@ -1,15 +1,13 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import {console} from "forge-std/console.sol";
 import {Create2} from "@openzeppelin/contracts/utils/Create2.sol";
 
 import {UUPSProxy} from "./UUPSProxy.sol";
 import {IUUPSProxy} from "./IUUPSProxy.sol";
+import {IVerifiableFactory} from "./IVerifiableFactory.sol";
 
-contract VerifiableFactory {
-    event ProxyDeployed(address indexed sender, address indexed proxyAddress, uint256 salt, address implementation);
-
+contract VerifiableFactory is IVerifiableFactory {
     /**
      * @dev Deploys a new `UUPSProxy` contract at a deterministic address.
      *
@@ -32,8 +30,6 @@ contract VerifiableFactory {
 
         UUPSProxy proxy = new UUPSProxy{salt: outerSalt}(address(this), outerSalt);
 
-        require(isContract(address(proxy)), "Proxy deployment failed");
-
         proxy.initialize(implementation, data);
 
         emit ProxyDeployed(msg.sender, address(proxy), salt, implementation);
@@ -50,14 +46,13 @@ contract VerifiableFactory {
      * @param proxy The address of the proxy contract being verified.
      * @return A boolean indicating whether the verification succeeded.
      */
-    function verifyContract(address proxy) public view returns (bool) {
-        if (!isContract(proxy)) {
-            return false;
-        }
-        try IUUPSProxy(proxy).getVerifiableProxySalt() returns (bytes32 salt) {
+    function verifyContract(address proxy, address expectedImplementation) public view returns (bool) {
+        if (!isContract(proxy)) return false;
+
+        try IUUPSProxy(proxy).getVerifiableProxyData() returns (bytes32 salt, address actualImplementation) {
+            if (actualImplementation != expectedImplementation) return false;
             return _verifyContract(proxy, salt);
         } catch {}
-
         return false;
     }
 

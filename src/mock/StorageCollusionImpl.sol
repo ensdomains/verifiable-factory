@@ -23,4 +23,8 @@ contract StorageConflictImplementation is UUPSUpgradeable, OwnableUpgradeable {
             sstore(0, 0xdeadbeef)
         }
     }
+
+    function canUpgradeFrom(address previousImplementation) external view returns (bool) {
+        return true;
+    }
 }

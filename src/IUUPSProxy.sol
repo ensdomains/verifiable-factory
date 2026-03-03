@@ -2,7 +2,17 @@
 pragma solidity ^0.8.20;
 
 interface IUUPSProxy {
-    function getVerifiableProxySalt() external view returns (bytes32);
+    error ImplementationCannotBeZeroAddress();
+
+    error AlreadyInitialized();
+
+    error ImplementationNotSet();
+
+    error InvalidUpgradeTarget(address currentImplementation, address newImplementation);
+
+    error UpgradeNotAllowedInContext();
+
+    function getVerifiableProxyData() external view returns (bytes32 salt, address implementation);
 
     function verifiableProxyFactory() external view returns (address);
 }
