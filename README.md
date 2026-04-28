@@ -1,169 +1,112 @@
-# Verifiable Factory Contract
+# Verifiable Factory
 
-A system for deploying and verifying proxy contracts with predictable storage layouts and deterministic addresses using CREATE2.
+This repo contains a `CREATE2` factory for deterministic, verifiable, UUPS-compatible proxy clones.
 
-## Components
-
-### 1. Verifiable Factory Contract
-- Deploys Verifiable UUPSProxy instances using CREATE2 opcode
-- Handles on-chain verification of deployed proxies
-- Manages proxy upgrades through a secure ownership model
-- Uses deterministic salt generation for predictable addresses
-
-### 2. Verifiable UUPSProxy
-- UUPS proxy pattern with verified storage layout
-- Fixed storage slots via [SlotDerivation](https://docs.openzeppelin.com/contracts/5.x/api/utils#SlotDerivation) under `proxy.verifiable` namespace
-  - `salt` (uint256)
-- Immutable `verifiableProxyFactory` field (set in bytecode)
-- Implements secure upgrade mechanism via UUPSUpgradable
-- Initializable to prevent implementation tampering
-
-## Architecture
+The factory deploys one shared `UUPSProxyLogic` contract. Each proxy is a minimal clone that delegates proxy bookkeeping to that shared logic, while keeping its own ERC-1967 implementation slot. The clone runtime also carries the derived salt, which lets the factory verify later that a proxy address came from this factory.
 
 ```mermaid
 sequenceDiagram
-    participant User
-    participant VerifiableFactory
-    participant UUPSProxy
-    participant Implementation
+    participant Caller
+    participant Factory as VerifiableFactory
+    participant Clone as Proxy clone
+    participant Logic as UUPSProxyLogic
+    participant Impl as Implementation
 
-    %% Deployment Flow
-    User->>VerifiableFactory: deployProxy(implementation, salt)
-    VerifiableFactory->>VerifiableFactory: Generate outerSalt (keccak256(sender, salt))
-    VerifiableFactory->>UUPSProxy: CREATE2 deployment
-    UUPSProxy->>UUPSProxy: Set immutable factory address
-    VerifiableFactory->>UUPSProxy: initialize(outerSalt, implementation)
-    UUPSProxy->>Implementation: Delegate calls
-    VerifiableFactory->>User: Return proxy address
-
-    %% Verification Flow
-    User->>VerifiableFactory: verifyContract(proxyAddress)
-    VerifiableFactory->>UUPSProxy: Check contract existence
-    VerifiableFactory->>UUPSProxy: Query salt and factory address
-    VerifiableFactory->>VerifiableFactory: Reconstruct CREATE2 address
-    VerifiableFactory->>User: Return verification result
-
-    %% Upgrade Flow
-    User->>UUPSProxy: upgradeToAndCall(newImpl, data)
-    UUPSProxy->>Implementation: fallback to UUPSUpgradable upgradeToAndCall(newImpl, data)
-    Implementation->>Implementation: Check caller is owner
-    Implementation->>Implementation: Switch delegation target
+    Caller->>Factory: deployProxy(implementation, salt, data)
+    Factory->>Clone: CREATE2 clone(proxyLogic, outerSalt)
+    Factory->>Clone: initialize(implementation, data)
+    Clone->>Logic: delegatecall
+    Logic->>Impl: delegatecall data
+    Caller->>Clone: application call / ETH transfer
+    Clone->>Logic: delegatecall
+    Logic->>Impl: delegatecall
 ```
 
-## Implementation Guide
+## Deploying
 
-### Requirements
-1. Inherit UUPS compliance:
+`deployProxy(implementation, salt, data)` does four things:
+
+- derives `outerSalt = keccak256(abi.encode(msg.sender, salt))`
+- deploys clone bytecode for `factory.proxyLogic()` with `outerSalt` appended to the runtime
+- stores `implementation` in the clone's ERC-1967 implementation slot
+- delegatecalls `data` into `implementation` if `data` is nonempty
+
+The proxy address is deterministic for a given factory, shared logic address, caller, and user salt:
+
 ```solidity
-import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
-
-contract MyContract is UUPSUpgradeable {
-
-  // ..rest of your own implementation
+bytes32 outerSalt = keccak256(abi.encode(caller, userSalt));
+bytes memory bytecode = CloneProxyBytecode.creationCode(factory.proxyLogic(), outerSalt);
+address proxy = Create2.computeAddress(outerSalt, keccak256(bytecode), address(factory));
 ```
 
-2. Use initializer instead of constructor:
-```solidity
-import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+The caller is part of `outerSalt`, so two callers can use the same user salt without colliding.
 
-contract MyContract is Initializable, UUPSUpgradeable {
-    // Implementation must follow UUPS upgrade pattern requirements
+## Verifying
 
-    function initialize() public initializer {
-        // Initialize inherited UUPS contract
-        __UUPSUpgradeable_init()
-    }
+`verifyContract(proxy, expectedImplementation)` checks that:
 
-    // ..rest of your own implementation
-```
+- `proxy` has code
+- `proxy` returns verifiable proxy data
+- the current implementation is `expectedImplementation`
+- the proxy address matches this factory's `CREATE2` derivation for the returned salt
 
-3. Implement upgrade authorization:
-```solidity
-import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+That proves the address was deployed by this factory and currently points at the expected implementation. It does not prove the implementation is safe, audited, storage-compatible with old versions, or still on its original implementation. After an upgrade, verify against the new current implementation.
 
-contract MyContract is UUPSUpgradeable, OwnableUpgradeable {
+## Implementations
 
-    // Mandatory security measure - define who can upgrade the contract
-    // This function is executed on the CURRENT implementation (old contract)
-    // during the upgrade process. It verifies permissions before switching implementations.
-    function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
-
-    // ..rest of your own implementation
-```
-
-### Example Implementation
+Implementations should use OpenZeppelin `UUPSUpgradeable` and must implement `IProxyAuthorization`:
 
 ```solidity
-// SPDX-License-Identifier: MIT
-pragma solidity ^0.8.20;
-
-// Required UUPS imports
-import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
-
-contract MyImplementationV1 is UUPSUpgradeable, OwnableUpgradeable {
-    
-    uint256 public value;
-
-    // Initialization replaces constructor functionality
-    function initialize(address owner, uint256 initialValue) public initializer {
-        // Initialize parent contracts first
-        __Ownable_init(owner);       // Sets initial owner
-        __UUPSUpgradeable_init();    // Required UUPS initialization
-        
-        // Custom initialization logic
-        value = initialValue;
-    }
-
-    // Critical security function - defines upgrade permissions
-    // Using onlyOwner modifier ensures only the designated owner can authorize contract upgrades
-    function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
-
-    // ..rest of your own implementation
+interface IProxyAuthorization {
+    function canUpgradeFrom(address previousImplementation) external view returns (bool);
 }
 ```
 
-### Example Implementation Upgrade
+There are two upgrade checks:
+
+- the current implementation's UUPS `_authorizeUpgrade` decides who can upgrade
+- the new implementation's `canUpgradeFrom(currentImplementation)` says whether this upgrade path is allowed
+
+Usually `canUpgradeFrom` is just an allowlist of previous implementation addresses:
 
 ```solidity
-// SPDX-License-Identifier: MIT
-pragma solidity ^0.8.20;
+contract MyImplementation is UUPSUpgradeable, OwnableUpgradeable, IProxyAuthorization {
+    address public allowedPreviousImplementation;
+    uint256[49] private __gap;
 
-import "./MyImplementationV1.sol";
-
-contract MyImplementationV2 is MyImplementationV1 {
-
-    uint256 public value;
-    
-    function postUpgradeSetup(uint256 upgradedValue) external onlyOwner {
-        value = upgradedValue;
+    function initialize(address owner) public initializer {
+        __Ownable_init(owner);
+        __UUPSUpgradeable_init();
     }
+
+    function canUpgradeFrom(address previousImplementation) external view returns (bool) {
+        return previousImplementation == allowedPreviousImplementation;
+    }
+
+    function _authorizeUpgrade(address) internal override onlyOwner {}
 }
 ```
 
-### Post-Upgrade Hooks
+## Trust Model
 
-To execute logic after an upgrade, use `data` parameter in `upgradeToAndCall` pattern.
+An authorized upgrade means you trust both the new implementation and the `upgradeToAndCall` payload. The post-upgrade hook runs with `delegatecall` in the proxy's storage context, so it can write any proxy storage slot, including ERC-1967 slots.
 
-The `upgradeToAndCall` pattern allows executing any function on the new implementation:
-- Calls are made via `DELEGATECALL` from the proxy, so `msg.sender` will refer to the original sender in hook functions, while `address(this)` will refer to the proxy address.
-- Storage modifications affect the proxy's state
-- Caller must follow the authorization rules as implemented in the implementation contract
+Normal application calls are stricter. `UUPSProxyLogic` checks the ERC-1967 implementation slot after non-upgrade fallback calls and reverts if the implementation changed.
 
-```solidity
-// initial values based on example implementation
-// address owner = address(0x..)
-// uint256 initialValue = 6174; 
+## Storage
 
-// In your deploy script
-bytes memory initData = abi.encodeWithSelector(MyImplementationV1.initialize.selector, owner, initialValue);
-address proxyAddress = factory.deployProxy(address(implementation), salt, initData);
+The implementation address uses the standard ERC-1967 slot:
 
-MockRegistryV1 proxyV1 = MockRegistryV1(proxyAddress);
+```text
+0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc
+```
 
-// uint256 upgradedValue = 1729;
+The verification salt is not stored in proxy storage. It is appended to the clone runtime bytecode and returned by `getVerifiableProxyData()`.
 
-// In your upgrade script (owner wallet calls)
-bytes memory callData = abi.encodeWithSelector(MyImplementationV2.postUpgradeSetup.selector, upgradedValue);
-proxyV1.upgradeToAndCall(address(newImplementation), callData);
+Implementation upgrades still need normal upgradeable-contract storage layout discipline: append new variables instead of reordering existing ones, and use storage gaps or namespaced storage for contracts that may need future base-contract storage.
+
+## Development
+
+```sh
+forge test
 ```
