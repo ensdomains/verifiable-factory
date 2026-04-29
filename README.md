@@ -52,6 +52,57 @@ The caller is part of `outerSalt`, so two callers can use the same user salt wit
 
 That proves the address was deployed by this factory and currently points at the expected implementation. It does not prove the implementation is safe, audited, storage-compatible with old versions, or still on its original implementation. After an upgrade, verify against the new current implementation.
 
+## Upgrading
+
+Upgrades are started by calling `upgradeToAndCall(newImplementation, data)` on the proxy.
+
+```mermaid
+sequenceDiagram
+    participant Caller
+    participant Clone as Proxy clone
+    participant Logic as UUPSProxyLogic
+    participant Current as Current implementation
+    participant New as New implementation
+    participant Storage as Proxy ERC-1967 storage
+
+    Caller->>Clone: upgradeToAndCall(newImplementation, data)
+    Clone->>Logic: delegatecall
+    Logic->>Storage: read currentImplementation
+    Logic->>New: canUpgradeFrom(currentImplementation)
+    alt new implementation rejects current implementation
+        New-->>Logic: false
+        Logic-->>Caller: revert InvalidUpgradeTarget
+    else new implementation accepts current implementation
+        New-->>Logic: true
+        Logic->>Current: delegatecall upgradeToAndCall(newImplementation, data)
+        Note over Current,Storage: Current implementation code runs in the proxy storage context.
+        Current->>Current: authorize caller and target implementation
+        alt current implementation rejects caller or target
+            Current-->>Caller: revert
+        else current implementation accepts caller and target
+            Current->>New: UUPS compatibility check, if implemented
+            Current->>Storage: set implementation = newImplementation
+            opt data is nonempty
+                Current->>New: delegatecall data
+            end
+        end
+    end
+```
+
+There are two upgrade checks:
+
+- the new implementation's `canUpgradeFrom(currentImplementation)` says whether this upgrade path is allowed
+- the current implementation's `upgradeToAndCall(newImplementation, data)` decides whether this caller may perform this specific upgrade
+
+With OpenZeppelin `UUPSUpgradeable`, the current implementation's decision point is
+`_authorizeUpgrade(address newImplementation)`. That hook receives the target implementation address, so the current
+implementation can block a specific target by reverting.
+
+If an implementation does not use OpenZeppelin `UUPSUpgradeable`, it must still expose a compatible
+`upgradeToAndCall(address newImplementation, bytes data)` function. That function is where the current implementation
+must authenticate the caller, reject disallowed target implementations, write the ERC-1967 implementation slot, and run
+any post-upgrade call data.
+
 ## Implementations
 
 Implementations should use OpenZeppelin `UUPSUpgradeable` and must implement `IProxyAuthorization`:
@@ -62,17 +113,13 @@ interface IProxyAuthorization {
 }
 ```
 
-There are two upgrade checks:
-
-- the current implementation's UUPS `_authorizeUpgrade` decides who can upgrade
-- the new implementation's `canUpgradeFrom(currentImplementation)` says whether this upgrade path is allowed
-
 Usually `canUpgradeFrom` is just an allowlist of previous implementation addresses:
 
 ```solidity
 contract MyImplementation is UUPSUpgradeable, OwnableUpgradeable, IProxyAuthorization {
     address public allowedPreviousImplementation;
-    uint256[49] private __gap;
+    address public allowedUpgradeTarget;
+    uint256[48] private __gap;
 
     function initialize(address owner) public initializer {
         __Ownable_init(owner);
@@ -83,7 +130,9 @@ contract MyImplementation is UUPSUpgradeable, OwnableUpgradeable, IProxyAuthoriz
         return previousImplementation == allowedPreviousImplementation;
     }
 
-    function _authorizeUpgrade(address) internal override onlyOwner {}
+    function _authorizeUpgrade(address newImplementation) internal override onlyOwner {
+        require(newImplementation == allowedUpgradeTarget, "Upgrade target not allowed");
+    }
 }
 ```
 
