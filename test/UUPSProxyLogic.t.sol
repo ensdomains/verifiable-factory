@@ -2,14 +2,15 @@
 pragma solidity ^0.8.20;
 
 import "forge-std/Test.sol";
-import "../src/UUPSProxy.sol";
 import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
-import {SlotDerivation} from "@openzeppelin/contracts/utils/SlotDerivation.sol";
 import {ERC1967Utils} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Utils.sol";
 import {StorageSlot} from "@openzeppelin/contracts/utils/StorageSlot.sol";
 import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
+import {CloneProxyBytecode} from "../src/CloneProxyBytecode.sol";
+import {IProxyAuthorization} from "../src/IProxyAuthorization.sol";
 import {MockRegistry} from "../src/mock/MockRegistry.sol";
 import {IUUPSProxy} from "../src/IUUPSProxy.sol";
+import {UUPSProxyLogic} from "../src/UUPSProxyLogic.sol";
 
 contract MockProxyAuthorization is IProxyAuthorization, OwnableUpgradeable, UUPSUpgradeable {
     address allowedPreviousImpl;
@@ -39,7 +40,13 @@ contract MaliciousProxyAuthorization is IProxyAuthorization, UUPSUpgradeable {
 
     function _authorizeUpgrade(address newImplementation) internal override {}
 
-    function canUpgradeFrom(address previousImplementation) external view returns (bool) {
+    function canUpgradeFrom(
+        address /*previousImplementation*/
+    )
+        external
+        pure
+        returns (bool)
+    {
         return true;
     }
 
@@ -48,59 +55,81 @@ contract MaliciousProxyAuthorization is IProxyAuthorization, UUPSUpgradeable {
     }
 }
 
-contract UUPSProxyTest is Test {
-    using StorageSlot for bytes32;
-    using SlotDerivation for string;
+contract LogicPayableReceiver {
+    uint256 public received;
 
-    UUPSProxy proxy;
+    receive() external payable {
+        received += msg.value;
+    }
+}
+
+contract UUPSProxyLogicTest is Test {
+    UUPSProxyLogic proxyLogic;
+    UUPSProxyLogic proxy;
     MockProxyAuthorization mockProxyAuthorization;
     MaliciousProxyAuthorization maliciousProxyAuthorization;
 
-    address factory = address(0x1);
+    address factory;
     address owner = address(0x2);
     address maliciousUser = address(0x3);
     address implementation = address(new MockRegistry());
     bytes32 salt = bytes32(uint256(12345));
     bytes emptyData;
 
-    string internal constant _SALT_SLOT = "eth.ens.proxy.verifiable.salt";
-
     function setUp() public {
-        proxy = new UUPSProxy(factory, salt);
+        factory = address(this);
+        proxyLogic = new UUPSProxyLogic();
+        proxy = UUPSProxyLogic(payable(_deployProxyClone(address(proxyLogic), salt)));
         mockProxyAuthorization = new MockProxyAuthorization(address(implementation));
         maliciousProxyAuthorization = new MaliciousProxyAuthorization();
     }
 
     function test_Initialize() public {
         // initialize the proxy
-        vm.prank(factory);
         proxy.initialize(implementation, abi.encodeWithSelector(MockRegistry.initialize.selector, owner));
 
         // check salt and owner values
         (bytes32 actualSalt, address actualImplementation) = proxy.getVerifiableProxyData();
         assertEq(actualSalt, salt, "Salt mismatch");
         assertEq(actualImplementation, implementation, "Implementation mismatch");
+        assertEq(proxy.verifiableProxyFactory(), factory, "Factory mismatch");
         assertEq(MockRegistry(address(proxy)).owner(), owner, "Owner mismatch");
     }
 
     function test_Initialize_ZeroAddress() public {
-        vm.prank(factory);
         vm.expectRevert(abi.encodeWithSelector(IUUPSProxy.ImplementationCannotBeZeroAddress.selector));
         proxy.initialize(address(0), emptyData);
     }
 
     function test_Initialize_AlreadyInitialized() public {
-        vm.prank(factory);
         proxy.initialize(implementation, abi.encodeWithSelector(MockRegistry.initialize.selector, owner));
 
-        vm.prank(factory);
         vm.expectRevert(abi.encodeWithSelector(IUUPSProxy.AlreadyInitialized.selector));
         proxy.initialize(implementation, emptyData);
     }
 
+    function test_Initialize_WithValueAndEmptyDataReverts() public {
+        vm.deal(address(this), 1 ether);
+
+        vm.expectRevert(abi.encodeWithSelector(ERC1967Utils.ERC1967NonPayable.selector));
+        proxy.initialize{value: 1}(implementation, emptyData);
+    }
+
+    function test_ReceiveDelegatesToImplementation() public {
+        LogicPayableReceiver receiver = new LogicPayableReceiver();
+        proxy.initialize(address(receiver), emptyData);
+
+        vm.deal(owner, 1 ether);
+        vm.prank(owner);
+        (bool success,) = address(proxy).call{value: 1}("");
+
+        assertTrue(success, "Receive should delegate to implementation");
+        assertEq(address(proxy).balance, 1, "Proxy balance mismatch");
+        assertEq(LogicPayableReceiver(payable(address(proxy))).received(), 1, "Receive hook did not run");
+    }
+
     function test_UpgradeToAndCall() public {
         // initialize the proxy
-        vm.prank(factory);
         proxy.initialize(implementation, abi.encodeWithSelector(MockRegistry.initialize.selector, owner));
 
         // upgrade to proxy authorization
@@ -113,7 +142,6 @@ contract UUPSProxyTest is Test {
     }
 
     function test_UpgradeToAndCall_ZeroAddress() public {
-        vm.prank(factory);
         proxy.initialize(implementation, abi.encodeWithSelector(MockRegistry.initialize.selector, owner));
 
         vm.prank(owner);
@@ -128,7 +156,6 @@ contract UUPSProxyTest is Test {
     }
 
     function test_UpgradeToAndCall_UnauthorizedUpgrade() public {
-        vm.prank(factory);
         proxy.initialize(
             address(mockProxyAuthorization), abi.encodeWithSelector(MockRegistry.initialize.selector, owner)
         );
@@ -139,7 +166,6 @@ contract UUPSProxyTest is Test {
     }
 
     function test_UpgradeToAndCall_InvalidUpgradeTargetForCurrentImplementation() public {
-        vm.prank(factory);
         proxy.initialize(address(maliciousProxyAuthorization), emptyData);
 
         vm.prank(owner);
@@ -156,12 +182,22 @@ contract UUPSProxyTest is Test {
     }
 
     function test_UpgradeNotAllowedInContext() public {
-        vm.prank(factory);
         proxy.initialize(address(maliciousProxyAuthorization), emptyData);
 
         // change the implementation
         vm.prank(owner);
         vm.expectRevert(abi.encodeWithSelector(IUUPSProxy.UpgradeNotAllowedInContext.selector));
         MaliciousProxyAuthorization(address(proxy)).changeImplementation(address(implementation));
+    }
+
+    function _deployProxyClone(address logic, bytes32 salt_) internal returns (address clone) {
+        bytes memory creationCode = CloneProxyBytecode.creationCode(logic, salt_);
+
+        assembly {
+            clone := create(0, add(creationCode, 0x20), mload(creationCode))
+            if iszero(clone) {
+                revert(0, 0)
+            }
+        }
     }
 }
