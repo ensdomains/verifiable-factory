@@ -12,6 +12,8 @@ interface IUUPSProxy {
 
     error UpgradeNotAllowedInContext();
 
+    function initialize(address implementation, bytes calldata data) external payable;
+
     function getVerifiableProxyData() external view returns (bytes32 salt, address implementation);
 
     function verifiableProxyFactory() external view returns (address);

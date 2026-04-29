@@ -3,37 +3,46 @@ pragma solidity ^0.8.20;
 
 import {Create2} from "@openzeppelin/contracts/utils/Create2.sol";
 
-import {UUPSProxy} from "./UUPSProxy.sol";
+import {CloneProxyBytecode} from "./CloneProxyBytecode.sol";
+import {UUPSProxyLogic} from "./UUPSProxyLogic.sol";
 import {IUUPSProxy} from "./IUUPSProxy.sol";
 import {IVerifiableFactory} from "./IVerifiableFactory.sol";
 
 contract VerifiableFactory is IVerifiableFactory {
+    address public immutable proxyLogic;
+
+    constructor() {
+        proxyLogic = address(new UUPSProxyLogic());
+    }
+
     /**
-     * @dev Deploys a new `UUPSProxy` contract at a deterministic address.
+     * @dev Deploys a new verifiable proxy clone at a deterministic address.
      *
-     * This function deploys a proxy contract using the CREATE2 opcode, ensuring a predictable
-     * address based on the sender's address and a provided salt. The deployed proxy is
-     * controlled by the factory and is initialized to use a specific implementation.
+     * The deployed proxy is an EIP-1167-style clone that delegates proxy mechanics to the
+     * factory's `proxyLogic` contract. The clone runtime also appends the derived salt so the
+     * factory can later verify the proxy's CREATE2 address.
      *
-     * - A unique address for the proxy is generated using the caller's address and the salt.
-     * - After deployment, the proxy's `initialize` function is called to configure it with the given salt,
-     *   the factory address, and the provided implementation address.
-     * - The proxy is fully managed by the factory, which controls upgrades and other administrative methods.
-     * - The event `ProxyDeployed` is emitted, logging details of the deployment including the sender, proxy address, salt, and implementation.
+     * The CREATE2 salt is `keccak256(abi.encode(msg.sender, salt))`, so two callers can reuse
+     * the same user salt without colliding.
      *
      * @param implementation The address of the contract implementation the proxy will delegate calls to.
      * @param salt A value provided by the caller to ensure uniqueness of the proxy address.
-     * @return proxy The address of the deployed `UUPSProxy`.
+     * @return proxy The address of the deployed proxy clone.
      */
-    function deployProxy(address implementation, uint256 salt, bytes memory data) external returns (address) {
+    function deployProxy(address implementation, uint256 salt, bytes memory data) external returns (address proxy) {
         bytes32 outerSalt = keccak256(abi.encode(msg.sender, salt));
+        bytes memory executableBytecode = _proxyCreationCode(outerSalt);
 
-        UUPSProxy proxy = new UUPSProxy{salt: outerSalt}(address(this), outerSalt);
+        assembly {
+            proxy := create2(0, add(executableBytecode, 0x20), mload(executableBytecode), outerSalt)
+            if iszero(proxy) {
+                revert(0, 0)
+            }
+        }
 
-        proxy.initialize(implementation, data);
+        IUUPSProxy(proxy).initialize(implementation, data);
 
-        emit ProxyDeployed(msg.sender, address(proxy), salt, implementation);
-        return address(proxy);
+        emit ProxyDeployed(msg.sender, proxy, salt, implementation);
     }
 
     /**
@@ -57,12 +66,15 @@ contract VerifiableFactory is IVerifiableFactory {
     }
 
     function _verifyContract(address proxy, bytes32 salt) private view returns (bool) {
-        // get creation bytecode with constructor arguments
-        bytes memory bytecode = abi.encodePacked(type(UUPSProxy).creationCode, abi.encode(address(this), salt));
+        bytes memory proxyBytecode = _proxyCreationCode(salt);
 
-        address expectedProxyAddress = Create2.computeAddress(salt, keccak256(bytecode), address(this));
+        address expectedProxyAddress = Create2.computeAddress(salt, keccak256(proxyBytecode), address(this));
 
         return expectedProxyAddress == proxy;
+    }
+
+    function _proxyCreationCode(bytes32 salt) private view returns (bytes memory creationCode) {
+        creationCode = CloneProxyBytecode.creationCode(proxyLogic, salt);
     }
 
     function isContract(address account) internal view returns (bool) {

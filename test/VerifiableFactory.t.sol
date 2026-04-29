@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import {Test, console2} from "forge-std/Test.sol";
+import {Test} from "forge-std/Test.sol";
 import {Create2} from "@openzeppelin/contracts/utils/Create2.sol";
 import {OwnableUpgradeable, Initializable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import {ERC1967Utils} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Utils.sol";
 
+import {CloneProxyBytecode} from "../src/CloneProxyBytecode.sol";
 import {VerifiableFactory} from "../src/VerifiableFactory.sol";
 import {IVerifiableFactory} from "../src/IVerifiableFactory.sol";
-import {UUPSProxy} from "../src/UUPSProxy.sol";
 import {IUUPSProxy} from "../src/IUUPSProxy.sol";
 import {MockRegistry} from "../src/mock/MockRegistry.sol";
 import {MockRegistryV2} from "../src/mock/MockRegistryV2.sol";
@@ -49,6 +49,7 @@ contract VerifiableFactoryTest is Test {
 
     function test_FactoryInitialState() public view {
         assertTrue(address(factory) != address(0), "Factory deployment failed");
+        assertTrue(factory.proxyLogic() != address(0), "Proxy logic deployment failed");
         assertTrue(address(implementation) != address(0), "Implementation deployment failed");
     }
 
@@ -69,7 +70,7 @@ contract VerifiableFactoryTest is Test {
         assertTrue(isContract(proxyAddress), "Proxy should be a contract");
 
         // verify proxy state
-        UUPSProxy proxy = UUPSProxy(payable(proxyAddress));
+        IUUPSProxy proxy = IUUPSProxy(proxyAddress);
         bytes32 computedSalt = keccak256(abi.encode(owner, salt));
         (bytes32 actualSalt, address actualImplementation) = proxy.getVerifiableProxyData();
         assertEq(actualSalt, computedSalt, "Proxy salt mismatch");
@@ -204,13 +205,40 @@ contract VerifiableFactoryTest is Test {
         address proxyAddress = factory.deployProxy(address(implementation), salt, emptyData);
 
         // test proxy state
-        UUPSProxy proxy = UUPSProxy(payable(proxyAddress));
+        IUUPSProxy proxy = IUUPSProxy(proxyAddress);
 
         bytes32 computedSalt = keccak256(abi.encode(owner, salt));
         (bytes32 actualSalt, address actualImplementation) = proxy.getVerifiableProxyData();
         assertEq(actualSalt, computedSalt, "Wrong salt");
         assertEq(actualImplementation, address(implementation), "Wrong implementation");
         assertEq(proxy.verifiableProxyFactory(), address(factory), "Wrong factory");
+    }
+
+    function test_ProxyReceiveDelegatesToImplementation() public {
+        PayableReceiver receiver = new PayableReceiver();
+
+        vm.prank(owner);
+        address proxyAddress = factory.deployProxy(address(receiver), 1, emptyData);
+
+        vm.deal(user, 1 ether);
+        vm.prank(user);
+        (bool success,) = proxyAddress.call{value: 1}("");
+
+        assertTrue(success, "Receive should delegate to implementation");
+        assertEq(proxyAddress.balance, 1, "Proxy balance mismatch");
+        assertEq(PayableReceiver(payable(proxyAddress)).received(), 1, "Receive hook did not run");
+    }
+
+    function test_ProxyReceiveRevertsWhenImplementationRejectsEth() public {
+        vm.prank(owner);
+        address proxyAddress = factory.deployProxy(address(implementation), 1, emptyData);
+
+        vm.deal(user, 1 ether);
+        vm.prank(user);
+        (bool success,) = proxyAddress.call{value: 1}("");
+
+        assertFalse(success, "Receive should follow implementation payable behavior");
+        assertEq(proxyAddress.balance, 0, "Proxy should not retain rejected ETH");
     }
 
     function test_StoragePersistenceAfterUpgrade() public {
@@ -270,7 +298,7 @@ contract VerifiableFactoryTest is Test {
         address proxyAddress = factory.deployProxy(address(implementation), salt, initData);
 
         // test proxy state
-        UUPSProxy proxy = UUPSProxy(payable(proxyAddress));
+        IUUPSProxy proxy = IUUPSProxy(proxyAddress);
         MockRegistry proxyRegistryV1 = MockRegistry(proxyAddress);
 
         bytes32 computedSalt = keccak256(abi.encode(owner, salt));
@@ -297,7 +325,7 @@ contract VerifiableFactoryTest is Test {
         conflictedProxy.dangerousMethod();
 
         // verify critical storage slots maintained
-        UUPSProxy proxyInstance = UUPSProxy(payable(proxy));
+        IUUPSProxy proxyInstance = IUUPSProxy(proxy);
         assertEq(proxyInstance.verifiableProxyFactory(), address(factory), "Factory ref corrupted");
         (bytes32 actualSalt,) = proxyInstance.getVerifiableProxyData();
         assertEq(actualSalt, keccak256(abi.encode(owner, salt)), "Salt ref corrupted");
@@ -334,8 +362,16 @@ contract VerifiableFactoryTest is Test {
     function computeExpectedAddress(uint256 salt) internal view returns (address) {
         bytes32 outerSalt = keccak256(abi.encode(owner, salt));
 
-        bytes memory bytecode = abi.encodePacked(type(UUPSProxy).creationCode, abi.encode(address(factory), outerSalt));
+        bytes memory bytecode = CloneProxyBytecode.creationCode(factory.proxyLogic(), outerSalt);
 
         return Create2.computeAddress(outerSalt, keccak256(bytecode), address(factory));
+    }
+}
+
+contract PayableReceiver {
+    uint256 public received;
+
+    receive() external payable {
+        received += msg.value;
     }
 }
