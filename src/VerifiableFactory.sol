@@ -46,23 +46,22 @@ contract VerifiableFactory is IVerifiableFactory {
     }
 
     /**
-     * @dev Initiates verification of a proxy contract.
+     * @dev Verifies a proxy contract and returns its current implementation.
      *
      * This function attempts to validate a proxy contract by retrieving its salt
      * and reconstructing the address to ensure it was correctly deployed by the
      * current factory.
      *
      * @param proxy The address of the proxy contract being verified.
-     * @return A boolean indicating whether the verification succeeded.
+     * @return implementation The proxy's current implementation.
      */
-    function verifyContract(address proxy, address expectedImplementation) public view returns (bool) {
-        if (!isContract(proxy)) return false;
+    function verifyContract(address proxy) public view returns (address implementation) {
+        if (!isContract(proxy)) revert VerificationFailed(proxy);
 
         try IUUPSProxy(proxy).getVerifiableProxyData() returns (bytes32 salt, address actualImplementation) {
-            if (actualImplementation != expectedImplementation) return false;
-            return _verifyContract(proxy, salt);
+            if (_verifyContract(proxy, salt)) return actualImplementation;
         } catch {}
-        return false;
+        revert VerificationFailed(proxy);
     }
 
     function _verifyContract(address proxy, bytes32 salt) private view returns (bool) {
