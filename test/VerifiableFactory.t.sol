@@ -5,10 +5,12 @@ import {Test} from "forge-std/Test.sol";
 import {Create2} from "@openzeppelin/contracts/utils/Create2.sol";
 import {OwnableUpgradeable, Initializable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import {ERC1967Utils} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Utils.sol";
+import {StorageSlot} from "@openzeppelin/contracts/utils/StorageSlot.sol";
 
 import {CloneProxyBytecode} from "../src/CloneProxyBytecode.sol";
 import {VerifiableFactory} from "../src/VerifiableFactory.sol";
 import {IVerifiableFactory} from "../src/IVerifiableFactory.sol";
+import {IProxyAuthorization} from "../src/IProxyAuthorization.sol";
 import {IUUPSProxy} from "../src/IUUPSProxy.sol";
 import {MockRegistry} from "../src/mock/MockRegistry.sol";
 import {MockRegistryV2} from "../src/mock/MockRegistryV2.sol";
@@ -174,27 +176,57 @@ contract VerifiableFactoryTest is Test {
 
         vm.prank(owner);
         // verify the contract
-        bool isVerified = factory.verifyContract(proxyAddress, address(implementation));
-        assertTrue(isVerified, "Contract verification failed");
+        address verifiedImplementation = factory.verifyContract(proxyAddress);
+        assertEq(verifiedImplementation, address(implementation), "Wrong verified implementation");
 
         vm.prank(owner);
         // try to verify non-existent contract
         address randomAddress = makeAddr("random");
-        bool shouldBeFalse = factory.verifyContract(randomAddress, address(implementation));
-        assertFalse(shouldBeFalse, "Non-existent contract should not verify");
+        vm.expectRevert(abi.encodeWithSelector(IVerifiableFactory.VerificationFailed.selector, randomAddress));
+        factory.verifyContract(randomAddress);
     }
 
-    function test_VerifyContract_WrongImplementation() public {
+    function test_VerifyContract_ReturnsCurrentImplementationAfterUpgrade() public {
         uint256 salt = 1;
+        bytes memory initData = abi.encodeWithSelector(MockRegistry.initialize.selector, owner);
 
         // deploy proxy
         vm.prank(owner);
-        address proxyAddress = factory.deployProxy(address(implementation), salt, emptyData);
+        address proxyAddress = factory.deployProxy(address(implementation), salt, initData);
 
         vm.prank(owner);
-        // verify the contract
-        bool isVerified = factory.verifyContract(proxyAddress, address(implementationV2));
-        assertFalse(isVerified, "Contract verification should fail");
+        MockRegistry(proxyAddress).upgradeToAndCall(address(implementationV2), "");
+
+        address verifiedImplementation = factory.verifyContract(proxyAddress);
+        assertEq(verifiedImplementation, address(implementationV2), "Wrong upgraded implementation");
+    }
+
+    function test_VerifyContract_RejectsTrustedImplementationAfterBypassedUpgrade() public {
+        uint256 salt = 1;
+        UpgradeAuthorizationBypass untrustedImplementation = new UpgradeAuthorizationBypass(address(implementationV2));
+        PermissiveUpgradeTarget claimedUpgradeTarget = new PermissiveUpgradeTarget();
+
+        assertFalse(
+            implementationV2.canUpgradeFrom(address(untrustedImplementation)),
+            "Trusted implementation should reject the untrusted predecessor"
+        );
+
+        vm.prank(owner);
+        address proxyAddress = factory.deployProxy(address(untrustedImplementation), salt, emptyData);
+        assertEq(
+            factory.verifyContract(proxyAddress),
+            address(untrustedImplementation),
+            "Proxy should start on the untrusted implementation"
+        );
+
+        vm.expectRevert(abi.encodeWithSelector(IUUPSProxy.UpgradeNotAllowedInContext.selector));
+        IUpgradeToAndCall(proxyAddress).upgradeToAndCall(address(claimedUpgradeTarget), "");
+
+        assertEq(
+            factory.verifyContract(proxyAddress),
+            address(untrustedImplementation),
+            "Proxy should stay on the untrusted implementation after rejected bypass"
+        );
     }
 
     function test_ProxyInitialization() public {
@@ -342,8 +374,8 @@ contract VerifiableFactoryTest is Test {
         address proxy = factory.deployProxy(address(impl), salt, initData);
 
         // verification checks
-        bool verified = factory.verifyContract(proxy, address(impl));
-        assertTrue(verified, "Fuzz verification failed");
+        address verifiedImplementation = factory.verifyContract(proxy);
+        assertEq(verifiedImplementation, address(impl), "Fuzz verification failed");
 
         // additional safety assertions
         assertEq(IUUPSProxy(proxy).verifiableProxyFactory(), address(factory), "Factory relationship broken");
@@ -373,5 +405,31 @@ contract PayableReceiver {
 
     receive() external payable {
         received += msg.value;
+    }
+}
+
+contract PermissiveUpgradeTarget is IProxyAuthorization {
+    function canUpgradeFrom(address) external pure returns (bool) {
+        return true;
+    }
+}
+
+interface IUpgradeToAndCall {
+    function upgradeToAndCall(address newImplementation, bytes calldata data) external payable;
+}
+
+contract UpgradeAuthorizationBypass is IProxyAuthorization {
+    address private immutable forcedImplementation;
+
+    constructor(address forcedImplementation_) {
+        forcedImplementation = forcedImplementation_;
+    }
+
+    function canUpgradeFrom(address) external pure returns (bool) {
+        return true;
+    }
+
+    function upgradeToAndCall(address, bytes calldata) external payable {
+        StorageSlot.getAddressSlot(ERC1967Utils.IMPLEMENTATION_SLOT).value = forcedImplementation;
     }
 }

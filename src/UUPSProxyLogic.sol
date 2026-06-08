@@ -89,7 +89,7 @@ contract UUPSProxyLogic is IUUPSProxy {
             revert InvalidUpgradeTarget(implementation, newImplementation);
         }
 
-        _delegate(implementation, false);
+        _delegateUpgrade(implementation, newImplementation);
     }
 
     function _implementation() internal view returns (address impl) {
@@ -120,6 +120,26 @@ contract UUPSProxyLogic is IUUPSProxy {
             default {
                 return(0, returndatasize())
             }
+        }
+    }
+
+    function _delegateUpgrade(address implementation, address expectedImplementation) internal {
+        assembly {
+            calldatacopy(0, 0, calldatasize())
+
+            let result := delegatecall(gas(), implementation, 0, calldatasize(), 0, 0)
+            if iszero(result) {
+                returndatacopy(0, 0, returndatasize())
+                revert(0, returndatasize())
+            }
+
+            if iszero(eq(expectedImplementation, sload(_IMPLEMENTATION_SLOT))) {
+                mstore(0, _UPGRADE_NOT_ALLOWED_IN_CONTEXT_ERROR_SELECTOR)
+                revert(0x1c, 0x04)
+            }
+
+            returndatacopy(0, 0, returndatasize())
+            return(0, returndatasize())
         }
     }
 

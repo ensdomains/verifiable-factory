@@ -43,14 +43,14 @@ The caller is part of `outerSalt`, so two callers can use the same user salt wit
 
 ## Verifying
 
-`verifyContract(proxy, expectedImplementation)` checks that:
+`verifyContract(proxy)` checks that:
 
 - `proxy` has code
 - `proxy` returns verifiable proxy data
-- the current implementation is `expectedImplementation`
 - the proxy address matches this factory's `CREATE2` derivation for the returned salt
 
-That proves the address was deployed by this factory and currently points at the expected implementation. It does not prove the implementation is safe, audited, storage-compatible with old versions, or still on its original implementation. After an upgrade, verify against the new current implementation.
+If verification succeeds, it returns the proxy's current implementation address. If verification fails, it reverts with `VerificationFailed(proxy)`.
+That proves the address was deployed by this factory and tells the caller which implementation it currently points at. It does not prove the implementation is safe, audited, storage-compatible with old versions, or still on its original implementation. You need to trust the implementation entirely, including its upgrade authorization hook.
 
 ## Upgrading
 
