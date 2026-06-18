@@ -219,7 +219,7 @@ contract VerifiableFactoryTest is Test {
             "Proxy should start on the untrusted implementation"
         );
 
-        vm.expectRevert(abi.encodeWithSelector(IUUPSProxy.UpgradeNotAllowedInContext.selector));
+        vm.expectRevert(abi.encodeWithSelector(IUUPSProxy.UnexpectedUpgrade.selector));
         IUpgradeToAndCall(proxyAddress).upgradeToAndCall(address(claimedUpgradeTarget), "");
 
         assertEq(

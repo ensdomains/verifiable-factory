@@ -17,6 +17,9 @@ contract UUPSProxyLogic is IUUPSProxy {
     /// @dev `bytes4(keccak256(bytes("UpgradeNotAllowedInContext()")))`.
     uint256 internal constant _UPGRADE_NOT_ALLOWED_IN_CONTEXT_ERROR_SELECTOR = 0x784cf700;
 
+    /// @dev `bytes4(keccak256(bytes("UnexpectedUpgrade()")))`.
+    uint256 internal constant _UNEXPECTED_UPGRADE_ERROR_SELECTOR = 0x2be61883;
+
     /// @dev `bytes4(keccak256(bytes("ERC1967InvalidImplementation(address)")))`.
     uint256 internal constant _ERC1967_INVALID_IMPLEMENTATION_ERROR_SELECTOR = 0x4c9c8ce3;
 
@@ -134,7 +137,7 @@ contract UUPSProxyLogic is IUUPSProxy {
             }
 
             if iszero(eq(expectedImplementation, sload(_IMPLEMENTATION_SLOT))) {
-                mstore(0, _UPGRADE_NOT_ALLOWED_IN_CONTEXT_ERROR_SELECTOR)
+                mstore(0, _UNEXPECTED_UPGRADE_ERROR_SELECTOR)
                 revert(0x1c, 0x04)
             }
 
