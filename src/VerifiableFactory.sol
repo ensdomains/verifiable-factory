@@ -45,7 +45,15 @@ contract VerifiableFactory is IVerifiableFactory {
         emit ProxyDeployed(msg.sender, proxy, salt, implementation);
     }
 
-    /// @inheritdoc IVerifiableFactory
+    /**
+     * @dev Predicts the proxy address for a deployer and user salt, whether or not it is deployed.
+     *
+     * The address is independent of the implementation and initialization data.
+     *
+     * @param deployer The account that calls deployProxy.
+     * @param salt The user salt passed to deployProxy, before the deployer is mixed in.
+     * @return proxy The predicted proxy address.
+     */
     function predictProxyAddress(address deployer, uint256 salt) external view returns (address proxy) {
         return _computeProxyAddress(keccak256(abi.encode(deployer, salt)));
     }
