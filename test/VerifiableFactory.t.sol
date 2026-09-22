@@ -80,6 +80,42 @@ contract VerifiableFactoryTest is Test {
         assertEq(proxy.verifiableProxyFactory(), address(factory), "Proxy factory mismatch");
     }
 
+    function testFuzz_PredictProxyAddressMatchesDeployment(address deployer, uint256 salt) public {
+        address predicted = IVerifiableFactory(address(factory)).predictProxyAddress(deployer, salt);
+        assertEq(predicted.code.length, 0);
+
+        bytes memory initData = abi.encodeCall(MockRegistry.initialize, (owner));
+        vm.prank(deployer);
+        address deployed = factory.deployProxy(address(implementation), salt, initData);
+
+        assertEq(predicted, deployed);
+        assertEq(factory.predictProxyAddress(deployer, salt), deployed);
+        assertEq(factory.verifyContract(deployed), address(implementation));
+        assertEq(MockRegistry(deployed).owner(), owner);
+    }
+
+    function test_PredictProxyAddressNamespaces() public {
+        uint256 salt = 1;
+        address predicted = factory.predictProxyAddress(owner, salt);
+        address otherDeployer = factory.predictProxyAddress(user, salt);
+        address otherSalt = factory.predictProxyAddress(owner, salt + 1);
+        VerifiableFactory otherFactory = new VerifiableFactory();
+        address otherFactoryProxy = otherFactory.predictProxyAddress(owner, salt);
+
+        assertNotEq(predicted, otherDeployer);
+        assertNotEq(predicted, otherSalt);
+        assertNotEq(predicted, otherFactoryProxy);
+
+        vm.prank(owner);
+        assertEq(factory.deployProxy(address(implementation), salt, emptyData), predicted);
+        vm.prank(user);
+        assertEq(factory.deployProxy(address(implementationV2), salt, emptyData), otherDeployer);
+        vm.prank(owner);
+        assertEq(factory.deployProxy(address(implementation), salt + 1, emptyData), otherSalt);
+        vm.prank(owner);
+        assertEq(otherFactory.deployProxy(address(implementation), salt, emptyData), otherFactoryProxy);
+    }
+
     function test_DeployProxyWithSameSalt() public {
         uint256 salt = 1;
         vm.startPrank(owner);
