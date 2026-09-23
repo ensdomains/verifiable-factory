@@ -31,15 +31,17 @@ sequenceDiagram
 - stores `implementation` in the clone's ERC-1967 implementation slot
 - delegatecalls `data` into `implementation` if `data` is nonempty
 
-The proxy address is deterministic for a given factory, shared logic address, caller, and user salt:
+The proxy address is deterministic for a given factory, shared logic address, caller, and user salt.
+Use `predictProxyAddress(deployer, salt)` to compute it before or after deployment:
 
 ```solidity
-bytes32 outerSalt = keccak256(abi.encode(caller, userSalt));
-bytes memory bytecode = CloneProxyBytecode.creationCode(factory.proxyLogic(), outerSalt);
-address proxy = Create2.computeAddress(outerSalt, keccak256(bytecode), address(factory));
+address proxy = factory.predictProxyAddress(caller, userSalt);
 ```
 
-The caller is part of `outerSalt`, so two callers can use the same user salt without colliding.
+Pass the account that will call `deployProxy` and the same user salt. The factory derives
+`outerSalt = keccak256(abi.encode(deployer, salt))`, so two callers can use the same user salt
+without colliding. The implementation and initialization data do not affect the address.
+Prediction does not check whether the proxy is deployed or verify its implementation.
 
 ## Verifying
 

@@ -46,6 +46,19 @@ contract VerifiableFactory is IVerifiableFactory {
     }
 
     /**
+     * @dev Predicts the proxy address for a deployer and user salt, whether or not it is deployed.
+     *
+     * The address is independent of the implementation and initialization data.
+     *
+     * @param deployer The account that calls deployProxy.
+     * @param salt The user salt passed to deployProxy, before the deployer is mixed in.
+     * @return proxy The predicted proxy address.
+     */
+    function predictProxyAddress(address deployer, uint256 salt) external view returns (address proxy) {
+        return _computeProxyAddress(keccak256(abi.encode(deployer, salt)));
+    }
+
+    /**
      * @dev Verifies a proxy contract and returns its current implementation.
      *
      * This function attempts to validate a proxy contract by retrieving its salt
@@ -59,17 +72,13 @@ contract VerifiableFactory is IVerifiableFactory {
         if (!isContract(proxy)) revert VerificationFailed(proxy);
 
         try IUUPSProxy(proxy).getVerifiableProxyData() returns (bytes32 salt, address actualImplementation) {
-            if (_verifyContract(proxy, salt)) return actualImplementation;
+            if (_computeProxyAddress(salt) == proxy) return actualImplementation;
         } catch {}
         revert VerificationFailed(proxy);
     }
 
-    function _verifyContract(address proxy, bytes32 salt) private view returns (bool) {
-        bytes memory proxyBytecode = _proxyCreationCode(salt);
-
-        address expectedProxyAddress = Create2.computeAddress(salt, keccak256(proxyBytecode), address(this));
-
-        return expectedProxyAddress == proxy;
+    function _computeProxyAddress(bytes32 salt) private view returns (address) {
+        return Create2.computeAddress(salt, keccak256(_proxyCreationCode(salt)), address(this));
     }
 
     function _proxyCreationCode(bytes32 salt) private view returns (bytes memory creationCode) {
